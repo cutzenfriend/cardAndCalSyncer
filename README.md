@@ -136,9 +136,16 @@ the copy-paste.) The token is refreshed automatically afterwards — one-time st
 
 - **No true real-time** — iCloud CalDAV offers no push. CaCs polls on an
   interval (default 300 s, down to 30 s) and transfers only deltas via sync token.
-- **Initial sync / duplicates:** vdirsyncer matches by UID. If the same events
-  already exist on both sides, test with **one** calendar first — or enable
-  **Dry-run mode** under Configuration.
+- **Initial sync / duplicates:** vdirsyncer matches by UID, so duplicates only
+  happen when the *same* event has *different* UIDs on each side. Check first
+  with **Dry-run mode**. If you do get duplicates, the reliable fix is to set the
+  pair to **one-way (A→B)**, use **Configuration → pair → Clear B…** to empty the
+  target side (preview shows the count; optional "only items newer than N
+  months"), then sync once so B mirrors A. Clearing a CalDAV side (iCloud/
+  Nextcloud) is solid; clearing **Google** is best-effort.
+- **No date filter during sync:** vdirsyncer syncs whole collections, so an
+  ongoing "ignore events older than X months" is **not possible**. The only
+  date-based control is the one-time "newer than N months" option in the Clear tool.
 - **Dry-run mode:** runs every sync read-only against an isolated status, so
   nothing is written to your providers — handy to validate credentials and
   mappings before going live. It confirms connectivity and guarantees zero

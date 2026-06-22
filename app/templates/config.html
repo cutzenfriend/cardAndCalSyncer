@@ -263,6 +263,8 @@ function renderPairs(){
       <div class="row gap wrap">
         <button class="btn" onclick="savePair('${pid}')">Save pair</button>
         <button class="btn" onclick="doDiscover('${pid}')">Load collections</button>
+        <button class="btn small" onclick="clearDialog('${pid}','a')">Clear A…</button>
+        <button class="btn small" onclick="clearDialog('${pid}','b')">Clear B…</button>
         <button class="btn small danger" onclick="delPair('${pid}')">Delete pair</button>
         <span class="muted" id="disc-${pid}"></span>
       </div>
@@ -292,6 +294,52 @@ async function savePair(pid){
   try{ const r=await api('/api/pairs',{method:'POST',body:JSON.stringify(payload)});
        CFG=r.config; renderPairs(); toast('Pair saved ✓');
   }catch(e){ toast(e.message,true); }
+}
+
+function clearDialog(pid, side){
+  const p=CFG.pairs[pid];
+  if(p._new){ toast('Save the pair first',true); return; }
+  const accId=side==='a'?p.a:p.b;
+  const acc=CFG.accounts[accId]||{};
+  const accName=acc.name||accId;
+  const what=p.service==='calendar'?'calendars':'address books';
+  const dlg=document.createElement('div'); dlg.className='overlay';
+  dlg.innerHTML=`<div class="dialog">
+    <h2>Clear ${esc(accName)} <span class="muted">(side ${side.toUpperCase()})</span></h2>
+    <div class="note warn">⚠️ This permanently deletes items from <b>${esc(accName)}</b>'s mapped
+      ${what} in this pair. Use it to empty a side before a one-way first sync (then mirror from
+      the other side).${acc.kind==='google'?'<br>Note: clearing Google is best-effort.':''}</div>
+    <label>Only items newer than N months <span class="muted">(empty or 0 = everything)</span>
+      <input id="clr-months" type="number" min="0" placeholder="0"></label>
+    <div class="row gap" style="margin-top:12px">
+      <button class="btn" id="clr-preview">Preview</button>
+      <button class="btn danger" id="clr-confirm" disabled>Delete</button>
+      <button class="btn" id="clr-cancel">Cancel</button>
+    </div>
+    <p id="clr-msg" class="hint"></p></div>`;
+  document.body.appendChild(dlg);
+  const months=()=>parseInt(dlg.querySelector('#clr-months').value)||0;
+  const msg=dlg.querySelector('#clr-msg'), confirmBtn=dlg.querySelector('#clr-confirm');
+  dlg.querySelector('#clr-cancel').onclick=()=>dlg.remove();
+  dlg.querySelector('#clr-preview').onclick=async()=>{
+    msg.textContent='checking… (can take a while for large calendars)'; confirmBtn.disabled=true;
+    try{
+      const r=await api('/api/clear/preview',{method:'POST',body:JSON.stringify({pair:pid,side,months:months()})});
+      let t=`${r.count} item(s) would be deleted from ${r.account}.`;
+      if(r.samples&&r.samples.length) t+=' e.g. '+r.samples.slice(0,5).join(', ');
+      if(r.errors&&r.errors.length) t+=' — issues: '+r.errors.join('; ');
+      msg.textContent=t; confirmBtn.disabled = r.count===0;
+    }catch(e){ msg.textContent='Error: '+e.message; }
+  };
+  confirmBtn.onclick=async()=>{
+    if(!confirm('Permanently delete these items from '+accName+'? This cannot be undone.'))return;
+    msg.textContent='deleting…';
+    try{
+      const r=await api('/api/clear',{method:'POST',body:JSON.stringify({pair:pid,side,months:months()})});
+      toast('Deleted '+r.deleted+' item(s) from '+r.account);
+      dlg.remove();
+    }catch(e){ msg.textContent='Error: '+e.message; }
+  };
 }
 
 async function delPair(pid){

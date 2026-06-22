@@ -91,22 +91,45 @@ def _collection_deltas(pair_id: str) -> dict[str, tuple[dict, dict]]:
     return out
 
 
-def _dav_config(acc: dict[str, Any], service: str, delta: dict) -> dict[str, Any] | None:
-    """Build a direct (collection-URL) CalDAV/CardDAV storage config, or None."""
-    if acc.get("kind") == "google":
-        return None  # avoid Google fetch; the other side has the same content
-    url = delta.get("url")  # resolved per-collection URL from discovery
-    if not url:
-        # fall back to nothing — without the resolved collection URL we'd have to
-        # re-run discovery, which we skip for a best-effort feature.
-        return None
+def build_collection_config(account_id: str, acc: dict[str, Any], service: str,
+                            delta: dict) -> dict[str, Any] | None:
+    """Reconstruct the resolved per-collection storage config (base + cache delta),
+    mirroring what vdirsyncer built at discover time. Works for DAV and Google.
+    """
     is_cal = service == "calendar"
-    return {
-        "type": "caldav" if is_cal else "carddav",
-        "url": url,
-        "username": acc.get("username", "") or "",
-        "password": acc.get("password", "") or "",
-    }
+    kind = acc.get("kind", "caldav")
+    if kind == "google":
+        base = {
+            "type": "google_calendar" if is_cal else "google_contacts",
+            "token_file": f"{TOKEN_DIR}/{storage_name(account_id, service)}.token",
+            "client_id": acc.get("client_id", "") or "",
+            "client_secret": acc.get("client_secret", "") or "",
+        }
+    elif kind == "icloud":
+        base = {"type": "caldav" if is_cal else "carddav",
+                "url": ICLOUD_CAL_URL if is_cal else ICLOUD_CARD_URL,
+                "username": acc.get("username", "") or "",
+                "password": acc.get("password", "") or ""}
+    else:  # generic caldav/carddav (Microsoft, Nextcloud, ...)
+        base = {"type": "caldav" if is_cal else "carddav",
+                "url": acc.get("cal_url" if is_cal else "card_url", "") or "",
+                "username": acc.get("username", "") or "",
+                "password": acc.get("password", "") or ""}
+    full = {**base, **(delta or {})}
+    # need at least a resolved url (DAV) or a collection (Google) to address it
+    if not full.get("url") and not full.get("collection"):
+        return None
+    return full
+
+
+TOKEN_DIR = "/data"
+
+
+def _dav_config(account_id: str, acc: dict[str, Any], service: str, delta: dict) -> dict[str, Any] | None:
+    """Config for the title-fetch: DAV sides only (skip Google; same content)."""
+    if acc.get("kind") == "google":
+        return None
+    return build_collection_config(account_id, acc, service, delta)
 
 
 # --- main entry ------------------------------------------------------------
@@ -137,12 +160,12 @@ async def enrich(store, db, items: list[dict[str, Any]]) -> None:
 
                 # prefer a DAV side (skip Google); content is identical post-sync
                 candidates = [
-                    (accs.get(pair["a"], {}), a_delta, href_a),
-                    (accs.get(pair["b"], {}), b_delta, href_b),
+                    (pair["a"], accs.get(pair["a"], {}), a_delta, href_a),
+                    (pair["b"], accs.get(pair["b"], {}), b_delta, href_b),
                 ]
                 title = sub = None
-                for acc, delta, href in candidates:
-                    sconf = _dav_config(acc, svc, delta)
+                for acc_id, acc, delta, href in candidates:
+                    sconf = _dav_config(acc_id, acc, svc, delta)
                     if not sconf or not href:
                         continue
                     storage = await storage_instance_from_config(sconf, create=False, connector=conn)

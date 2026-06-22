@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import alerts
+import clear as clear_mod
 import confgen
 import enrich
 import parser
@@ -232,6 +233,33 @@ class Runner:
         elif status == "success" and prev_status == "failed" and al.get("on_recovery", True):
             alerts.notify(urls, "✅ CaCs: sync recovered",
                           f"Run #{run_id} succeeded.", kind="success")
+
+    # --- clear (destructive) -----------------------------------------------
+    async def clear(self, pair: str, side: str, months: int, execute: bool) -> dict[str, Any]:
+        async with self._lock:
+            self.busy = True
+            run_id = None
+            try:
+                if execute:
+                    run_id = self.db.start_run("clear", pair, "manual", _now())
+                res = await clear_mod.run_clear(self.store, pair, side, months, execute)
+                if run_id is not None:
+                    self.db.finish_run(
+                        run_id, status="failed" if res["errors"] else "success",
+                        finished_at=_now(), rc=0, n_create=0, n_update=0,
+                        n_delete=res["deleted"], n_errors=len(res["errors"]),
+                        log=(f"Cleared {res['deleted']} item(s) from {res['account']} "
+                             f"(side {side}).\n" + "\n".join(res["errors"])))
+                    res["run_id"] = run_id
+                return res
+            except Exception as exc:
+                if run_id is not None:
+                    self.db.finish_run(run_id, status="failed", finished_at=_now(), rc=-1,
+                                       n_create=0, n_update=0, n_delete=0, n_errors=1,
+                                       log=f"Clear failed: {exc}")
+                raise
+            finally:
+                self.busy = False
 
     # --- discover ----------------------------------------------------------
     async def discover(self, pair: str, list_all: bool = True) -> dict[str, Any]:

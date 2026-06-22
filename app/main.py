@@ -41,6 +41,9 @@ CONFIG_PATH = os.path.join(DATA_DIR, "cacs.json")
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 os.makedirs(DATA_DIR, exist_ok=True)
+# Google returns the full granted scope on refresh; relax oauthlib's scope check
+# for in-process fetches (enrichment, clear).
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 db = Database(DB_PATH)
 store = ConfigStore(CONFIG_PATH)
 auth = Auth(store)
@@ -476,6 +479,35 @@ def api_del_pair(pair_id: str, _: str = Depends(require_api)):
     pairs.pop(pair_id, None)
     store.replace("pairs", pairs)
     return {"ok": True, "config": store.public_view()}
+
+
+# --- API: clear one side (destructive) -------------------------------------
+async def _do_clear(request: Request, execute: bool) -> dict[str, Any]:
+    body = await request.json()
+    pair, side = body.get("pair"), body.get("side")
+    months = int(body.get("months") or 0)
+    if pair not in store.get()["pairs"]:
+        raise HTTPException(400, "Unknown pair")
+    if side not in ("a", "b"):
+        raise HTTPException(400, "Invalid side")
+    if runner.busy:
+        raise HTTPException(409, "Another operation is running")
+    try:
+        return await runner.clear(pair, side, months, execute=execute)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Clear failed: {exc}")
+
+
+@app.post("/api/clear/preview")
+async def api_clear_preview(request: Request, _: str = Depends(require_api)):
+    return await _do_clear(request, execute=False)
+
+
+@app.post("/api/clear")
+async def api_clear(request: Request, _: str = Depends(require_api)):
+    return await _do_clear(request, execute=True)
 
 
 # --- API: actions -----------------------------------------------------------
