@@ -156,7 +156,7 @@ def _status_payload() -> dict[str, Any]:
 def setup_page(request: Request):
     if auth.is_configured():
         return RedirectResponse("/login", status_code=303)
-    return templates.TemplateResponse("setup.html", {"request": request})
+    return templates.TemplateResponse(request, "setup.html")
 
 
 @app.post("/api/setup")
@@ -179,7 +179,7 @@ def login_page(request: Request):
         return RedirectResponse("/setup", status_code=303)
     if current_user(request):
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html")
 
 
 @app.post("/api/login")
@@ -203,8 +203,8 @@ def logout():
 # --- HTML pages ------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, _: str = Depends(require_page)):
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request, "status": _status_payload(),
+    return templates.TemplateResponse(request, "dashboard.html", {
+        "status": _status_payload(),
         "runs": [dict(r) for r in db.list_runs(limit=10, kind="sync")],
         "activities": [dict(a) for a in db.recent_activities(limit=15)],
     })
@@ -212,8 +212,8 @@ def dashboard(request: Request, _: str = Depends(require_page)):
 
 @app.get("/runs", response_class=HTMLResponse)
 def runs_page(request: Request, _: str = Depends(require_page)):
-    return templates.TemplateResponse("runs.html", {
-        "request": request, "runs": [dict(r) for r in db.list_runs(limit=100)]})
+    return templates.TemplateResponse(request, "runs.html", {
+        "runs": [dict(r) for r in db.list_runs(limit=100)]})
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
@@ -221,8 +221,8 @@ def run_detail(run_id: int, request: Request, _: str = Depends(require_page)):
     run = db.get_run(run_id)
     if not run:
         raise HTTPException(404, "Run not found")
-    return templates.TemplateResponse("run_detail.html", {
-        "request": request, "run": dict(run),
+    return templates.TemplateResponse(request, "run_detail.html", {
+        "run": dict(run),
         "activities": [dict(a) for a in db.run_activities(run_id)]})
 
 
@@ -230,21 +230,20 @@ def run_detail(run_id: int, request: Request, _: str = Depends(require_page)):
 def activity_page(request: Request, action: str | None = None,
                   pair: str | None = None, _: str = Depends(require_page)):
     pairs = [p.get("name") or pid for pid, p in store.get()["pairs"].items()]
-    return templates.TemplateResponse("activity.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "activity.html", {
         "activities": [dict(a) for a in db.recent_activities(limit=300, action=action, pair=pair)],
         "f_action": action or "", "f_pair": pair or "", "pairs": pairs})
 
 
 @app.get("/logs", response_class=HTMLResponse)
 def logs_page(request: Request, _: str = Depends(require_page)):
-    return templates.TemplateResponse("logs.html", {"request": request})
+    return templates.TemplateResponse(request, "logs.html")
 
 
 @app.get("/config", response_class=HTMLResponse)
 def config_page(request: Request, _: str = Depends(require_page)):
-    return templates.TemplateResponse("config.html", {
-        "request": request, "config": store.public_view()})
+    return templates.TemplateResponse(request, "config.html", {
+        "config": store.public_view()})
 
 
 # --- API: status/config ----------------------------------------------------
