@@ -63,8 +63,10 @@ textarea{width:100%;resize:vertical}
 .tbl{width:100%;max-width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
 .tbl th{text-align:left;color:var(--muted);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--line)}
 .tbl td{padding:8px 10px;border-bottom:1px solid var(--panel2);vertical-align:top}
-/* long ids/uids must wrap so tables never force horizontal scrolling */
-.tbl th,.tbl td{overflow-wrap:anywhere;word-break:break-word}
+/* headers stay on one line; only cell content wraps so long ids/uids
+   never force horizontal scrolling (and short headers never collapse) */
+.tbl th{white-space:nowrap}
+.tbl td{overflow-wrap:anywhere;word-break:break-word}
 .tbl tr.click{cursor:pointer}
 .tbl tr.click:hover td{background:var(--panel2)}
 .uid{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
