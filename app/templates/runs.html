@@ -8,12 +8,14 @@
   <tbody>
   {% for r in runs %}
     <tr onclick="location='/runs/{{ r.id }}'" class="click">
-      <td>{{ r.id }}</td><td>{{ r.kind }}</td><td>{{ r.pair or 'all' }}</td>
-      <td>{{ r.collection or '—' }}</td>
-      <td class="nowrap">{{ r.started_at }}</td><td>{{ r.trigger }}</td>
-      <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
-      <td>{{ r.n_create }} / {{ r.n_update }} / {{ r.n_delete }}</td>
-      <td>{{ r.n_errors }}</td>
+      <td data-label="#">{{ r.id }}</td><td data-label="Kind">{{ r.kind }}</td>
+      <td data-label="Pair">{{ r.pair or 'all' }}</td>
+      <td data-label="Mapping">{{ r.collection or '—' }}</td>
+      <td class="nowrap" data-label="Started">{{ r.started_at }}</td>
+      <td data-label="Trigger">{{ r.trigger }}</td>
+      <td data-label="Status"><span class="pill {{ r.status }}">{{ r.status }}</span></td>
+      <td data-label="+ ~ −">{{ r.n_create }} / {{ r.n_update }} / {{ r.n_delete }}</td>
+      <td data-label="Errors">{{ r.n_errors }}</td>
     </tr>
   {% else %}<tr><td colspan="9" class="muted">No runs yet.</td></tr>{% endfor %}
   </tbody>

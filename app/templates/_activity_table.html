@@ -3,17 +3,17 @@
   <tbody>
   {% for a in activities %}
     <tr>
-      <td class="nowrap">{{ a.ts }}</td>
-      <td><span class="act act-{{ a.action }}">
+      <td class="nowrap" data-label="Time">{{ a.ts }}</td>
+      <td data-label="Action"><span class="act act-{{ a.action }}">
         {% if a.action=='create' %}created{% elif a.action=='update' %}updated{% else %}deleted{% endif %}
       </span></td>
-      <td>{{ a.pair or '–' }}</td>
-      <td>{{ a.collection_label or a.collection or '–' }}</td>
-      <td class="nowrap">
+      <td data-label="Pair">{{ a.pair or '–' }}</td>
+      <td data-label="Calendar">{{ a.collection_label or a.collection or '–' }}</td>
+      <td class="nowrap" data-label="Direction">
         {% if a.src_name %}<span class="side {{ a.src_kind }}">{{ a.src_name }}</span> →{% endif %}
         <span class="side {{ a.dst_kind }}">{{ a.dst_name or '?' }}</span>
       </td>
-      <td>
+      <td data-label="Item">
         {% if a.title %}
           <div>{{ a.title }}</div>
           {% if a.subtitle %}<div class="muted">{{ a.subtitle }}</div>{% endif %}

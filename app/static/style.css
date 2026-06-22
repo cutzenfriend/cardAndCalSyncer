@@ -60,12 +60,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
 textarea{width:100%;resize:vertical}
 .hint{color:var(--muted);font-size:12px;margin:.2em 0 .8em}
 
-.tbl{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
+.tbl{width:100%;max-width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
 .tbl th{text-align:left;color:var(--muted);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--line)}
-.tbl td{padding:8px 10px;border-bottom:1px solid var(--panel2)}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--panel2);vertical-align:top}
+/* long ids/uids must wrap so tables never force horizontal scrolling */
+.tbl th,.tbl td{overflow-wrap:anywhere;word-break:break-word}
 .tbl tr.click{cursor:pointer}
 .tbl tr.click:hover td{background:var(--panel2)}
-.uid{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted);word-break:break-all}
+.uid{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .nowrap{white-space:nowrap}.muted{color:var(--muted)}
 
 .pill{font-size:12px;padding:2px 9px;border-radius:20px;text-transform:capitalize}
@@ -73,7 +75,7 @@ textarea{width:100%;resize:vertical}
 .pill.failed{background:rgba(248,81,73,.15);color:var(--bad)}
 .pill.running{background:rgba(79,140,255,.15);color:var(--accent)}
 
-.act{font-weight:600}
+.act{font-weight:600;white-space:nowrap}
 .act-create{color:var(--ok)}.act-update{color:var(--accent)}.act-delete{color:var(--bad)}
 .side{font-size:11px;padding:1px 7px;border-radius:5px;font-weight:600}
 .side.icloud{background:rgba(58,141,222,.18);color:var(--icloud)}
@@ -121,3 +123,33 @@ textarea{width:100%;resize:vertical}
 .brand.big span{color:var(--accent)}
 .authcard .sub{color:var(--muted);margin:2px 0 0}
 .btn.wide{width:100%;justify-content:center;text-align:center}
+
+/* unsaved-changes highlight */
+.btn.attention{background:var(--warn);border-color:var(--warn);color:#1a1205;font-weight:600;
+  box-shadow:0 0 0 3px rgba(210,153,34,.22)}
+.btn.attention:hover{filter:brightness(1.08);border-color:var(--warn)}
+.dirty-dot{display:inline-block;color:var(--warn);font-size:12px;margin-left:6px}
+.item.dirty{border-color:rgba(210,153,34,.55)}
+
+/* responsiveness: never scroll horizontally */
+html,body{max-width:100%;overflow-x:hidden}
+.container{overflow-wrap:anywhere}
+.topbar{flex-wrap:wrap;gap:10px 16px}
+.topbar nav{flex-wrap:wrap;gap:10px 14px;flex:1 1 auto;min-width:0}
+code{overflow-wrap:anywhere}
+@media(max-width:600px){
+  .container{padding:0 12px;margin:16px auto}
+  .topbar{padding:10px 12px}
+  /* stacked "card" rows so wide tables stay readable without scrolling */
+  .tbl{font-size:13px}
+  .tbl thead{display:none}
+  .tbl, .tbl tbody, .tbl tr, .tbl td{display:block;width:auto}
+  .tbl tr{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    margin:8px 0;padding:8px 12px}
+  .tbl tr.click:hover td{background:transparent}
+  .tbl td{border:0;padding:3px 0}
+  .tbl td::before{content:attr(data-label);display:block;color:var(--muted);
+    font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}
+  .tbl td:empty{display:none}
+  .grid2{grid-template-columns:1fr}
+}

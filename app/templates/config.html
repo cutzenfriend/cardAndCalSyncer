@@ -20,7 +20,7 @@
   <div class="row gap">
     <label class="chk"><input type="checkbox" id="al_fail"> on failure</label>
     <label class="chk"><input type="checkbox" id="al_rec"> on recovery</label>
-    <button class="btn" onclick="saveGeneral()">Save general</button>
+    <button class="btn" id="save-general" onclick="saveGeneral()">Save general</button>
     <span id="genmsg" class="muted"></span>
   </div>
 </section>
@@ -77,11 +77,17 @@ function toast(m,bad){const t=document.createElement('div');t.className='toast'+
 async function api(p,o){const r=await fetch(p,Object.assign({headers:{'Content-Type':'application/json'}},o||{}));
   if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.status); return r.json();}
 
+function generalDirty(){ const b=$('save-general'); if(b){ b.classList.add('attention'); b.textContent='Save general •'; } $('genmsg').textContent=''; }
+function generalClean(){ const b=$('save-general'); if(b){ b.classList.remove('attention'); b.textContent='Save general'; } }
 function fillGeneral(){
   $('interval').value=CFG.interval_seconds; $('enabled').checked=CFG.sync_enabled;
   $('baseurl').value=CFG.base_url||'';
   $('apprise').value=(CFG.alerts.apprise_urls||[]).join('\n');
   $('al_fail').checked=CFG.alerts.on_failure; $('al_rec').checked=CFG.alerts.on_recovery;
+  ['interval','enabled','baseurl','apprise','al_fail','al_rec'].forEach(id=>{
+    const el=$(id); const ev=(el.type==='checkbox'||el.tagName==='SELECT')?'change':'input';
+    el.addEventListener(ev, generalDirty);
+  });
 }
 async function saveGeneral(){
   CFG.interval_seconds=parseInt($('interval').value)||300; CFG.sync_enabled=$('enabled').checked;
@@ -91,7 +97,7 @@ async function saveGeneral(){
   try{ await api('/api/config',{method:'POST',body:JSON.stringify(
         {interval_seconds:CFG.interval_seconds,sync_enabled:CFG.sync_enabled,
          base_url:CFG.base_url,alerts:CFG.alerts})});
-       $('genmsg').textContent='saved ✓'; }catch(e){ $('genmsg').textContent=e.message; }
+       $('genmsg').textContent='saved ✓'; generalClean(); }catch(e){ $('genmsg').textContent=e.message; }
 }
 
 // --- ACCOUNTS ---
@@ -256,7 +262,7 @@ function renderPairs(){
       <table class="tbl"><thead><tr><th>Short name</th><th>A</th><th>B</th><th></th></tr></thead>
         <tbody id="map-${pid}"></tbody></table>
       <div class="row gap wrap">
-        <button class="btn" onclick="savePair('${pid}')">Save pair</button>
+        <button class="btn" id="save-${pid}" onclick="savePair('${pid}')">Save pair</button>
         <button class="btn" onclick="doDiscover('${pid}')">Load collections</button>
         <button class="btn primary" onclick="syncPair('${pid}')">Sync pair</button>
         <button class="btn small" onclick="clearDialog('${pid}','a')">Clear A…</button>
@@ -267,9 +273,19 @@ function renderPairs(){
       </div>
       <div id="builder-${pid}" class="builder hidden"></div>`;
     root.appendChild(sec);
-    sec.querySelectorAll('[data-p]').forEach(el=>el.onchange=()=>{ CFG.pairs[pid][el.dataset.p]=el.value; });
+    sec.querySelectorAll('[data-p]').forEach(el=>{
+      const ev = el.tagName==='SELECT' ? 'change' : 'input';
+      el.addEventListener(ev, ()=>{ CFG.pairs[pid][el.dataset.p]=el.value; markDirty(pid); });
+    });
     renderMap(pid);
+    if(p._new) markDirty(pid);
   }
+}
+
+function markDirty(pid){
+  const b=document.getElementById('save-'+pid);
+  if(b){ b.classList.add('attention'); if(b.dataset.dirty!=='1'){ b.dataset.dirty='1'; b.textContent='Save pair •'; } }
+  if(b){ const sec=b.closest('.item'); if(sec) sec.classList.add('dirty'); }
 }
 
 function renderMap(pid){
@@ -277,13 +293,13 @@ function renderMap(pid){
   const labels=CFG.pairs[pid].labels||{};
   colls.forEach((c,i)=>{ const tr=document.createElement('tr');
     const lbl=labels[c[0]];
-    tr.innerHTML=`<td>${esc(c[0])}${lbl?' <span class="muted">('+esc(lbl)+')</span>':''}</td>`+
-      `<td class="uid">${esc(c[1])}</td><td class="uid">${esc(c[2])}</td>`+
-      `<td class="row gap"><button class="btn small" onclick="syncMapping('${pid}',${i})">Sync</button>`+
+    tr.innerHTML=`<td data-label="Short name">${esc(c[0])}${lbl?' <span class="muted">('+esc(lbl)+')</span>':''}</td>`+
+      `<td class="uid" data-label="A">${esc(c[1])}</td><td class="uid" data-label="B">${esc(c[2])}</td>`+
+      `<td class="row gap" data-label=""><button class="btn small" onclick="syncMapping('${pid}',${i})">Sync</button>`+
       `<button class="btn small danger" onclick="delMap('${pid}',${i})">×</button></td>`; tb.appendChild(tr); });
   if(!colls.length) tb.innerHTML='<tr><td colspan="4" class="muted">No mappings yet.</td></tr>';
 }
-function delMap(pid,i){ CFG.pairs[pid].collections.splice(i,1); renderMap(pid); }
+function delMap(pid,i){ CFG.pairs[pid].collections.splice(i,1); renderMap(pid); markDirty(pid); }
 
 async function syncPair(pid){
   if(CFG.pairs[pid]._new){ toast('Save the pair first',true); return; }
@@ -465,6 +481,7 @@ async function doDiscover(pid){
       if(an||bn) labels[c[0]]=an||bn;
     });
     renderMap(pid);
+    if((CFG.pairs[pid].collections||[]).length) markDirty(pid);
     renderBuilder(pid,res);
   }catch(e){ note.textContent='Error: '+e.message; }
 }
@@ -493,7 +510,7 @@ function addMap(pid){
   const bn=(d.b.collections.find(x=>x.id===bid)||{}).name;
   CFG.pairs[pid].labels=CFG.pairs[pid].labels||{};
   CFG.pairs[pid].labels[sn]=an||bn||sn;
-  $('sn-'+pid).value=''; renderMap(pid);
+  $('sn-'+pid).value=''; renderMap(pid); markDirty(pid);
 }
 
 fillGeneral(); renderAccounts(); renderPairs();

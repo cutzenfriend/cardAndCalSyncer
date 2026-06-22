@@ -33,10 +33,11 @@ under <a href="/config">Configuration</a>.</div>
   <tbody>
   {% for r in runs %}
     <tr onclick="location='/runs/{{ r.id }}'" class="click">
-      <td>{{ r.id }}</td><td>{{ r.started_at }}</td><td>{{ r.trigger }}</td>
-      <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
-      <td>{{ r.n_create }} / {{ r.n_update }} / {{ r.n_delete }}</td>
-      <td>{{ r.n_errors }}</td>
+      <td data-label="#">{{ r.id }}</td><td class="nowrap" data-label="Time">{{ r.started_at }}</td>
+      <td data-label="Trigger">{{ r.trigger }}</td>
+      <td data-label="Status"><span class="pill {{ r.status }}">{{ r.status }}</span></td>
+      <td data-label="+ ~ −">{{ r.n_create }} / {{ r.n_update }} / {{ r.n_delete }}</td>
+      <td data-label="Errors">{{ r.n_errors }}</td>
     </tr>
   {% else %}<tr><td colspan="6" class="muted">No runs yet.</td></tr>{% endfor %}
   </tbody>
