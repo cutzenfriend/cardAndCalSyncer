@@ -303,12 +303,17 @@ function clearDialog(pid, side){
   const acc=CFG.accounts[accId]||{};
   const accName=acc.name||accId;
   const what=p.service==='calendar'?'calendars':'address books';
+  const one=p.service==='calendar'?'calendar':'address book';
+  const labels=p.labels||{};
+  const collOptions=(p.collections||[]).map(c=>`<option value="${esc(c[0])}">${esc(labels[c[0]]||c[0])}</option>`).join('')
+    + `<option value="">— All mapped ${what} —</option>`;
   const dlg=document.createElement('div'); dlg.className='overlay';
   dlg.innerHTML=`<div class="dialog">
-    <h2>Clear ${esc(accName)} <span class="muted">(side ${side.toUpperCase()})</span></h2>
-    <div class="note warn">⚠️ This permanently deletes items from <b>${esc(accName)}</b>'s mapped
-      ${what} in this pair. Use it to empty a side before a one-way first sync (then mirror from
+    <h2>Clear on ${esc(accName)} <span class="muted">(side ${side.toUpperCase()})</span></h2>
+    <div class="note warn">⚠️ This permanently deletes items from the selected ${one} on
+      <b>${esc(accName)}</b>. Use it to empty a side before a one-way first sync (then mirror from
       the other side).${acc.kind==='google'?'<br>Note: clearing Google is best-effort.':''}</div>
+    <label>Which ${one}?<select id="clr-coll">${collOptions}</select></label>
     ${p.service==='calendar'
       ? `<label>Only items newer than N months <span class="muted">(empty or 0 = everything)</span>
            <input id="clr-months" type="number" min="0" placeholder="0"></label>`
@@ -321,12 +326,15 @@ function clearDialog(pid, side){
     <p id="clr-msg" class="hint"></p></div>`;
   document.body.appendChild(dlg);
   const months=()=>{ const el=dlg.querySelector('#clr-months'); return el?(parseInt(el.value)||0):0; };
+  const coll=()=>dlg.querySelector('#clr-coll').value;
   const msg=dlg.querySelector('#clr-msg'), confirmBtn=dlg.querySelector('#clr-confirm');
+  ['#clr-coll','#clr-months'].forEach(s=>{ const el=dlg.querySelector(s);
+    if(el) el.onchange=()=>{ confirmBtn.disabled=true; msg.textContent='Preview again after changing this.'; }; });
   dlg.querySelector('#clr-cancel').onclick=()=>dlg.remove();
   dlg.querySelector('#clr-preview').onclick=async()=>{
     msg.textContent='checking… (can take a while for large calendars)'; confirmBtn.disabled=true;
     try{
-      const r=await api('/api/clear/preview',{method:'POST',body:JSON.stringify({pair:pid,side,months:months()})});
+      const r=await api('/api/clear/preview',{method:'POST',body:JSON.stringify({pair:pid,side,months:months(),collection:coll()})});
       let t=`${r.count} item(s) would be deleted from ${r.account}.`;
       if(r.samples&&r.samples.length) t+=' e.g. '+r.samples.slice(0,5).join(', ');
       if(r.errors&&r.errors.length) t+=' — issues: '+r.errors.join('; ');
@@ -337,7 +345,7 @@ function clearDialog(pid, side){
     if(!confirm('Permanently delete these items from '+accName+'? This cannot be undone.'))return;
     msg.textContent='deleting…';
     try{
-      const r=await api('/api/clear',{method:'POST',body:JSON.stringify({pair:pid,side,months:months()})});
+      const r=await api('/api/clear',{method:'POST',body:JSON.stringify({pair:pid,side,months:months(),collection:coll()})});
       toast('Deleted '+r.deleted+' item(s) from '+r.account);
       dlg.remove();
     }catch(e){ msg.textContent='Error: '+e.message; }

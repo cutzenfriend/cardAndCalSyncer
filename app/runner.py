@@ -235,21 +235,23 @@ class Runner:
                           f"Run #{run_id} succeeded.", kind="success")
 
     # --- clear (destructive) -----------------------------------------------
-    async def clear(self, pair: str, side: str, months: int, execute: bool) -> dict[str, Any]:
+    async def clear(self, pair: str, side: str, months: int, execute: bool,
+                    collection: str | None = None) -> dict[str, Any]:
         async with self._lock:
             self.busy = True
             run_id = None
             try:
                 if execute:
                     run_id = self.db.start_run("clear", pair, "manual", _now())
-                res = await clear_mod.run_clear(self.store, pair, side, months, execute)
+                res = await clear_mod.run_clear(self.store, pair, side, months, execute, collection)
                 if run_id is not None:
                     self.db.finish_run(
                         run_id, status="failed" if res["errors"] else "success",
                         finished_at=_now(), rc=0, n_create=0, n_update=0,
                         n_delete=res["deleted"], n_errors=len(res["errors"]),
                         log=(f"Cleared {res['deleted']} item(s) from {res['account']} "
-                             f"(side {side}).\n" + "\n".join(res["errors"])))
+                             f"(side {side}, calendar: {res['collection']}).\n"
+                             + "\n".join(res["errors"])))
                     res["run_id"] = run_id
                 return res
             except Exception as exc:

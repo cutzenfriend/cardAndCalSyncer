@@ -36,7 +36,7 @@ def _item_date(raw: str) -> date | None:
 
 
 async def run_clear(store, pair_id: str, side: str, months: int,
-                    execute: bool) -> dict[str, Any]:
+                    execute: bool, collection: str | None = None) -> dict[str, Any]:
     cfg = store.get()
     pair = cfg["pairs"].get(pair_id)
     if not pair:
@@ -71,6 +71,8 @@ async def run_clear(store, pair_id: str, side: str, months: int,
     async with aiohttp.TCPConnector(limit_per_host=4) as conn:
         for mapping in pair["collections"]:
             short = mapping[0]
+            if collection and short != collection:
+                continue  # only the chosen calendar/address book
             delta = deltas.get(short, ({}, {}))[0 if side == "a" else 1]
             conf = enrich.build_collection_config(acc_id, acc, svc, delta)
             if not conf:
@@ -125,4 +127,5 @@ async def run_clear(store, pair_id: str, side: str, months: int,
                             errors.append(f"{short}: delete failed: {exc}")
 
     return {"count": count, "deleted": deleted, "samples": samples,
-            "errors": errors, "account": acc.get("name", acc_id), "side": side}
+            "errors": errors, "account": acc.get("name", acc_id), "side": side,
+            "collection": collection or "all"}

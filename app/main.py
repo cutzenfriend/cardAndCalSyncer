@@ -486,6 +486,7 @@ async def _do_clear(request: Request, execute: bool) -> dict[str, Any]:
     body = await request.json()
     pair, side = body.get("pair"), body.get("side")
     months = int(body.get("months") or 0)
+    collection = body.get("collection") or None
     if pair not in store.get()["pairs"]:
         raise HTTPException(400, "Unknown pair")
     if side not in ("a", "b"):
@@ -493,7 +494,7 @@ async def _do_clear(request: Request, execute: bool) -> dict[str, Any]:
     if runner.busy:
         raise HTTPException(409, "Another operation is running")
     try:
-        return await runner.clear(pair, side, months, execute=execute)
+        return await runner.clear(pair, side, months, execute=execute, collection=collection)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
