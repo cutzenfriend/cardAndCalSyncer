@@ -1,3 +1,10 @@
+> [!WARNING]
+> ## ⚠️🚨 This tool can COMPLETELY WIPE your calendars and contacts 🚨⚠️
+>
+> CaCs makes **real, bidirectional changes** to your live accounts (iCloud, Google, CalDAV …). A wrong sync **direction**, a bad **mapping**, or the **Clear** / **Fix UIDs** tools can **permanently delete or overwrite events and contacts — there is no undo.** 🗑️💥
+>
+> 👉 **Back up your data first, and test with a throwaway calendar/address book before syncing anything you care about.** Use entirely at your own risk. 🧪✅
+
 # CaCs · cardAndCalSyncer
 
 Self-hosted, bidirectional sync for **calendars and contacts** between arbitrary
