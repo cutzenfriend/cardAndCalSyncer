@@ -73,7 +73,7 @@ async def _scheduler() -> None:
         interval = max(30, int(cfg.get("interval_seconds", 300)))
         if cfg.get("sync_enabled", True) and _ready_to_sync(cfg):
             try:
-                await runner.run_sync(trigger="scheduled")
+                await runner.run_sync_all(trigger="scheduled")
             except Exception:
                 log.exception("Scheduled sync failed")
         sched.next_run_at = time.time() + interval
@@ -540,7 +540,14 @@ async def api_sync(request: Request, _: str = Depends(require_api)):
         pass
     if runner.busy:
         raise HTTPException(409, "Sync already running")
-    _spawn(runner.run_sync(pair=body.get("pair") or None, trigger="manual"))
+    pair = body.get("pair") or None
+    collection = body.get("collection") or None
+    if pair:
+        if pair not in store.get()["pairs"]:
+            raise HTTPException(400, "Unknown pair")
+        _spawn(runner.run_sync(pair=pair, collection=collection, trigger="manual"))
+    else:
+        _spawn(runner.run_sync_all(trigger="manual"))
     return {"ok": True, "started": True}
 
 

@@ -118,26 +118,40 @@ class Runner:
             f.write(text)
 
     # --- sync --------------------------------------------------------------
-    async def run_sync(self, pair: str | None = None,
+    async def run_sync_all(self, trigger: str = "scheduled") -> list[dict[str, Any]]:
+        """Sync every configured pair as its own run (so runs are separated by pair)."""
+        results = []
+        for pid, p in self.store.get()["pairs"].items():
+            if not p.get("collections"):
+                continue
+            try:
+                results.append(await self.run_sync(pair=pid, trigger=trigger))
+            except Exception:
+                log.exception("sync of pair %s failed", pid)
+        return results
+
+    async def run_sync(self, pair: str | None = None, collection: str | None = None,
                        trigger: str = "scheduled") -> dict[str, Any]:
         async with self._lock:
             self.busy = True
             try:
-                return await self._run_sync_inner(pair, trigger)
+                return await self._run_sync_inner(pair, collection, trigger)
             finally:
                 self.busy = False
 
-    async def _run_sync_inner(self, pair: str | None, trigger: str) -> dict[str, Any]:
+    async def _run_sync_inner(self, pair: str | None, collection: str | None,
+                              trigger: str) -> dict[str, Any]:
         cfg = self.store.get()
         prev = self.db.last_run("sync")
         prev_status = prev["status"] if prev else None
         dry = bool(cfg.get("dry_run", False))
 
         trig = f"{trigger}·dry" if dry else trigger
-        run_id = self.db.start_run("sync", pair, trig, _now())
-        log.info("sync run #%s started (pair=%s, trigger=%s, dry=%s)", run_id, pair, trigger, dry)
+        run_id = self.db.start_run("sync", pair, trig, _now(), collection=collection)
+        log.info("sync run #%s started (pair=%s, collection=%s, trigger=%s, dry=%s)",
+                 run_id, pair, collection, trigger, dry)
         try:
-            return await self._do_sync(run_id, cfg, prev_status, pair, dry)
+            return await self._do_sync(run_id, cfg, prev_status, pair, dry, collection)
         except Exception as exc:
             log.exception("sync run #%s aborted", run_id)
             self.db.finish_run(
@@ -151,7 +165,8 @@ class Runner:
                     "errors": [str(exc)], "warnings": []}
 
     async def _do_sync(self, run_id: int, cfg: dict[str, Any], prev_status: str | None,
-                       pair: str | None, dry: bool = False) -> dict[str, Any]:
+                       pair: str | None, dry: bool = False,
+                       collection: str | None = None) -> dict[str, Any]:
         conf, secret_env = confgen.generate(cfg, only_pair=pair, dry_run=dry)
         self._write_conf(CONFIG_FILE, conf)
 
@@ -166,8 +181,10 @@ class Runner:
             await self._exec(dcmd, secret_env, run_id)
 
         cmd = ["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE, "sync"]
-        if pair:
-            cmd.append(pair)
+        if pair and collection:
+            cmd.append(f"{pair}/{collection}")   # single mapping
+        elif pair:
+            cmd.append(pair)                      # whole pair
 
         rc, lines = await self._exec(cmd, secret_env, run_id)
         parsed = parser.parse_sync_output(lines)

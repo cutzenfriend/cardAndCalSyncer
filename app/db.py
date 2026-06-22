@@ -9,8 +9,9 @@ from typing import Any, Iterator
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind         TEXT NOT NULL,            -- sync | discover
-    pair         TEXT,                     -- pair name or NULL (=all)
+    kind         TEXT NOT NULL,            -- sync | discover | clear
+    pair         TEXT,                     -- pair name/id or NULL (=all)
+    collection   TEXT,                     -- mapping short name or NULL (=whole pair)
     trigger      TEXT NOT NULL,            -- scheduled | manual
     status       TEXT NOT NULL,            -- running | success | failed
     started_at   TEXT NOT NULL,
@@ -60,11 +61,13 @@ class Database:
 
     def _migrate(self) -> None:
         """Add columns introduced after the first release to existing DBs."""
-        cur = self._conn.execute("PRAGMA table_info(activities)")
-        cols = {r["name"] for r in cur.fetchall()}
+        acols = {r["name"] for r in self._conn.execute("PRAGMA table_info(activities)")}
         for col in ("collection_label", "title", "subtitle"):
-            if col not in cols:
+            if col not in acols:
                 self._conn.execute(f"ALTER TABLE activities ADD COLUMN {col} TEXT")
+        rcols = {r["name"] for r in self._conn.execute("PRAGMA table_info(runs)")}
+        if "collection" not in rcols:
+            self._conn.execute("ALTER TABLE runs ADD COLUMN collection TEXT")
 
     @contextmanager
     def _cursor(self) -> Iterator[sqlite3.Cursor]:
@@ -77,12 +80,13 @@ class Database:
                 cur.close()
 
     # --- Runs --------------------------------------------------------------
-    def start_run(self, kind: str, pair: str | None, trigger: str, started_at: str) -> int:
+    def start_run(self, kind: str, pair: str | None, trigger: str, started_at: str,
+                  collection: str | None = None) -> int:
         with self._cursor() as cur:
             cur.execute(
-                "INSERT INTO runs (kind, pair, trigger, status, started_at) "
-                "VALUES (?,?,?,?,?)",
-                (kind, pair, trigger, "running", started_at),
+                "INSERT INTO runs (kind, pair, collection, trigger, status, started_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (kind, pair, collection, trigger, "running", started_at),
             )
             return int(cur.lastrowid)
 

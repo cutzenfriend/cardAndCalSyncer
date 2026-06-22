@@ -263,6 +263,7 @@ function renderPairs(){
       <div class="row gap wrap">
         <button class="btn" onclick="savePair('${pid}')">Save pair</button>
         <button class="btn" onclick="doDiscover('${pid}')">Load collections</button>
+        <button class="btn primary" onclick="syncPair('${pid}')">Sync pair</button>
         <button class="btn small" onclick="clearDialog('${pid}','a')">Clear A…</button>
         <button class="btn small" onclick="clearDialog('${pid}','b')">Clear B…</button>
         <button class="btn small danger" onclick="delPair('${pid}')">Delete pair</button>
@@ -282,10 +283,25 @@ function renderMap(pid){
     const lbl=labels[c[0]];
     tr.innerHTML=`<td>${esc(c[0])}${lbl?' <span class="muted">('+esc(lbl)+')</span>':''}</td>`+
       `<td class="uid">${esc(c[1])}</td><td class="uid">${esc(c[2])}</td>`+
-      `<td><button class="btn small danger" onclick="delMap('${pid}',${i})">×</button></td>`; tb.appendChild(tr); });
+      `<td class="row gap"><button class="btn small" onclick="syncMapping('${pid}',${i})">Sync</button>`+
+      `<button class="btn small danger" onclick="delMap('${pid}',${i})">×</button></td>`; tb.appendChild(tr); });
   if(!colls.length) tb.innerHTML='<tr><td colspan="4" class="muted">No mappings yet.</td></tr>';
 }
 function delMap(pid,i){ CFG.pairs[pid].collections.splice(i,1); renderMap(pid); }
+
+async function syncPair(pid){
+  if(CFG.pairs[pid]._new){ toast('Save the pair first',true); return; }
+  try{ await api('/api/sync',{method:'POST',body:JSON.stringify({pair:pid})});
+       toast('Sync started for this pair'); }
+  catch(e){ toast(e.message,true); }
+}
+async function syncMapping(pid, i){
+  if(CFG.pairs[pid]._new){ toast('Save the pair first',true); return; }
+  const c=CFG.pairs[pid].collections[i];
+  try{ await api('/api/sync',{method:'POST',body:JSON.stringify({pair:pid, collection:c[0]})});
+       toast('Sync started for '+((CFG.pairs[pid].labels||{})[c[0]]||c[0])); }
+  catch(e){ toast(e.message,true); }
+}
 
 async function savePair(pid){
   const p=CFG.pairs[pid];
