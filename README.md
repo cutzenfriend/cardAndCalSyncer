@@ -18,6 +18,7 @@ parses its output into a SQLite DB and shows everything in the browser.
   - **Microsoft / Outlook** and **any CalDAV/CardDAV server** (Nextcloud, Fastmail, mailbox.org, your own server …)
 - **Web UI** (port 8080): dashboard, activity (what/when/where/source→target), runs, live logs
 - **Fully configurable in the UI**: accounts, pairs, discovery, mappings, interval
+- **Dry-run mode** — read-only safe mode that validates credentials/mappings and writes nothing
 - **Login** with "stay signed in" and a guided first-time setup
 - **Alerts** via [Apprise](https://github.com/caronc/apprise) (email, ntfy, Telegram, Discord …)
 - **Healthcheck**, logs in `docker logs` and a file, bind mounts, non-root container
@@ -104,7 +105,13 @@ To update: `docker compose pull && docker compose up -d`.
 - **No true real-time** — iCloud CalDAV offers no push. CaCs polls on an
   interval (default 300 s, down to 30 s) and transfers only deltas via sync token.
 - **Initial sync / duplicates:** vdirsyncer matches by UID. If the same events
-  already exist on both sides, test with **one** calendar first.
+  already exist on both sides, test with **one** calendar first — or enable
+  **Dry-run mode** under Configuration.
+- **Dry-run mode:** runs every sync read-only against an isolated status, so
+  nothing is written to your providers — handy to validate credentials and
+  mappings before going live. It confirms connectivity and guarantees zero
+  changes, but cannot list the individual would-be changes (vdirsyncer exposes
+  no diff preview).
 - **Object titles:** the feed shows the UID (that's all vdirsyncer logs), plus
   direction, collection and timestamp.
 - **Both sides must exist** — CaCs does not create new calendars, it maps existing ones.

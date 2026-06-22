@@ -10,6 +10,11 @@
     <label>Sync interval (seconds)<input type="number" id="interval" min="30" step="10"></label>
     <label class="chk"><input type="checkbox" id="enabled"> Scheduled sync enabled</label>
   </div>
+  <label class="chk" style="margin-top:10px"><input type="checkbox" id="dryrun"> Dry run only (read-only, makes no changes)</label>
+  <p class="hint">When enabled, every sync runs read-only against an isolated status, so
+  nothing is written to your calendars/contacts. Useful to validate credentials and
+  mappings before going live. Note: it confirms connectivity and makes zero changes,
+  but cannot list the individual would-be changes (vdirsyncer has no diff preview).</p>
   <h3>Notifications (Apprise)</h3>
   <p class="hint">One URL per line (<code>mailto://…</code>, <code>tgram://…</code>, <code>ntfy://…</code>)</p>
   <textarea id="apprise" rows="2"></textarea>
@@ -75,15 +80,17 @@ async function api(p,o){const r=await fetch(p,Object.assign({headers:{'Content-T
 
 function fillGeneral(){
   $('interval').value=CFG.interval_seconds; $('enabled').checked=CFG.sync_enabled;
+  $('dryrun').checked=CFG.dry_run;
   $('apprise').value=(CFG.alerts.apprise_urls||[]).join('\n');
   $('al_fail').checked=CFG.alerts.on_failure; $('al_rec').checked=CFG.alerts.on_recovery;
 }
 async function saveGeneral(){
   CFG.interval_seconds=parseInt($('interval').value)||300; CFG.sync_enabled=$('enabled').checked;
+  CFG.dry_run=$('dryrun').checked;
   CFG.alerts={apprise_urls:$('apprise').value.split('\n').map(s=>s.trim()).filter(Boolean),
               on_failure:$('al_fail').checked, on_recovery:$('al_rec').checked};
   try{ await api('/api/config',{method:'POST',body:JSON.stringify(
-        {interval_seconds:CFG.interval_seconds,sync_enabled:CFG.sync_enabled,alerts:CFG.alerts})});
+        {interval_seconds:CFG.interval_seconds,sync_enabled:CFG.sync_enabled,dry_run:CFG.dry_run,alerts:CFG.alerts})});
        $('genmsg').textContent='saved ✓'; }catch(e){ $('genmsg').textContent=e.message; }
 }
 

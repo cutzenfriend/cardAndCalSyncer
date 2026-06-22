@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 from datetime import datetime, timezone
 from typing import Any
 
@@ -17,6 +18,7 @@ log = logging.getLogger("cacs.runner")
 
 CONFIG_FILE = "/config/vdirsyncer.conf"
 DISCOVER_CONF = "/config/.discover.conf"
+DRY_STATUS_DIR = "/data/status_dryrun"
 ROLLING_LOG = "/logs/vdirsyncer.log"
 
 
@@ -75,11 +77,13 @@ class Runner:
         cfg = self.store.get()
         prev = self.db.last_run("sync")
         prev_status = prev["status"] if prev else None
+        dry = bool(cfg.get("dry_run", False))
 
-        run_id = self.db.start_run("sync", pair, trigger, _now())
-        log.info("sync run #%s started (pair=%s, trigger=%s)", run_id, pair, trigger)
+        trig = f"{trigger}·dry" if dry else trigger
+        run_id = self.db.start_run("sync", pair, trig, _now())
+        log.info("sync run #%s started (pair=%s, trigger=%s, dry=%s)", run_id, pair, trigger, dry)
         try:
-            return await self._do_sync(run_id, cfg, prev_status, pair)
+            return await self._do_sync(run_id, cfg, prev_status, pair, dry)
         except Exception as exc:
             log.exception("sync run #%s aborted", run_id)
             self.db.finish_run(
@@ -92,10 +96,20 @@ class Runner:
                     "counts": {"create": 0, "update": 0, "delete": 0},
                     "errors": [str(exc)], "warnings": []}
 
-    async def _do_sync(self, run_id: int, cfg: dict[str, Any],
-                       prev_status: str | None, pair: str | None) -> dict[str, Any]:
-        conf, secret_env = confgen.generate(cfg, only_pair=pair)
+    async def _do_sync(self, run_id: int, cfg: dict[str, Any], prev_status: str | None,
+                       pair: str | None, dry: bool = False) -> dict[str, Any]:
+        conf, secret_env = confgen.generate(cfg, only_pair=pair, dry_run=dry)
         self._write_conf(CONFIG_FILE, conf)
+
+        if dry:
+            # isolated, throwaway status dir so the real sync state is never touched;
+            # discover into it first to populate the collection cache.
+            shutil.rmtree(DRY_STATUS_DIR, ignore_errors=True)
+            os.makedirs(DRY_STATUS_DIR, exist_ok=True)
+            dcmd = ["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE, "discover"]
+            if pair:
+                dcmd.append(pair)
+            await self._exec(dcmd, secret_env, run_id)
 
         cmd = ["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE, "sync"]
         if pair:

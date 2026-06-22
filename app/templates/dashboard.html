@@ -8,6 +8,11 @@
   <a class="btn" href="/config">Configuration</a>
 </div>
 
+{% if status.dry_run %}
+<div class="note warn">🧪 Dry-run mode is ON — syncs run read-only and make no changes.
+Turn it off under <a href="/config">Configuration</a> to sync for real.</div>
+{% endif %}
+
 {% if not status.ready %}
 <div class="note warn">⚠️ Not ready yet — please add credentials and map calendars/address books
 under <a href="/config">Configuration</a>.</div>
