@@ -154,3 +154,8 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ## License
 
 MIT
+
+## A note on AI
+
+This project was built with the help of AI. If that bothers you, feel free not
+to use it. :)
