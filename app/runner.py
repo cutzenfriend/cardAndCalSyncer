@@ -189,10 +189,11 @@ class Runner:
         rc, lines = await self._exec(cmd, secret_env, run_id)
         parsed = parser.parse_sync_output(lines)
 
-        # vdirsyncer hides the cause behind "Unknown error … use -vdebug". On
-        # failure, retry once at DEBUG (secrets redacted) to capture the traceback
-        # into the run log. Counts/status stay from the first pass.
-        if not dry and (rc != 0 or parsed.errors):
+        # vdirsyncer hides the cause behind "Unknown error … use -vdebug" (the
+        # traceback is only logged at DEBUG). On failure, retry once at DEBUG
+        # (secrets redacted) to capture it into the run log. Counts/status stay
+        # from the first pass. Runs even in dry mode (read-only -> safe).
+        if rc != 0 or parsed.errors:
             dbg = ["vdirsyncer", "-v", "DEBUG", "-c", CONFIG_FILE, "sync"] + cmd[6:]
             _, dlines = await self._exec(dbg, secret_env, run_id)
             lines = lines + ["", "----- DEBUG retry (redacted) -----"] + dlines
