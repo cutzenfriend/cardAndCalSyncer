@@ -25,6 +25,7 @@
     <button class="btn" type="submit">Filter</button>
   </form>
   <div class="row gap">
+    <button class="btn small" onclick="resolveNames()">Resolve names</button>
     <input id="clrdays" type="number" min="0" placeholder="0" title="older than N days (0 = all)" style="width:5em">
     <button class="btn small danger" onclick="clearLog()">Clear log</button>
   </div>
@@ -33,6 +34,14 @@
 {% endblock %}
 {% block scripts %}
 <script>
+  async function resolveNames(){
+    const btn=event.target; const old=btn.textContent;
+    btn.disabled=true; btn.textContent='resolving… (reads calendar items)';
+    try{ const r=await api('/api/resolve',{method:'POST',body:'{}'});
+         alert('Resolved '+r.resolved+' name(s).'+((r.errors&&r.errors.length)?'\nIssues: '+r.errors.slice(0,3).join('; '):''));
+         location.reload(); }
+    catch(e){ alert(e.message); btn.disabled=false; btn.textContent=old; }
+  }
   async function clearLog(){
     const d=parseInt(document.getElementById('clrdays').value)||0;
     const msg=d>0 ? 'Delete activity log entries older than '+d+' days?'

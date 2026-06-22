@@ -177,3 +177,60 @@ async def enrich(store, db, items: list[dict[str, Any]]) -> None:
                     db.set_activity_detail(it["activity_id"], title, sub)
             except Exception:
                 continue  # best-effort per item
+
+
+async def resolve(store, db, pair_id: str, collection: str | None = None) -> dict[str, Any]:
+    """On-demand backfill: list a pair's collection(s) and fill activity titles
+    by matching UID (independent of vdirsyncer's status). Prefers a CalDAV side
+    (skips Google when the other side has the same content). Never raises."""
+    cfg = store.get()
+    pair = cfg["pairs"].get(pair_id)
+    if not pair:
+        return {"resolved": 0, "errors": ["unknown pair"]}
+    svc = pair.get("service", "calendar")
+    accs = cfg["accounts"]
+    deltas = _collection_deltas(pair_id)
+    os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+    try:
+        from vdirsyncer.cli.utils import storage_instance_from_config
+    except Exception:
+        return {"resolved": 0, "errors": ["vdirsyncer unavailable"]}
+
+    resolved = 0
+    errors: list[str] = []
+    async with aiohttp.TCPConnector(limit_per_host=4) as conn:
+        for mapping in pair.get("collections", []):
+            short = mapping[0]
+            if collection and short != collection:
+                continue
+            a_delta, b_delta = deltas.get(short, ({}, {}))
+            # try a CalDAV side first, fall back to the other (incl. Google)
+            sides = [(pair["a"], accs.get(pair["a"], {}), a_delta),
+                     (pair["b"], accs.get(pair["b"], {}), b_delta)]
+            sides.sort(key=lambda s: 0 if s[1].get("kind") != "google" else 1)
+            done = False
+            for acc_id, acc, delta in sides:
+                if done:
+                    break
+                conf = build_collection_config(acc_id, acc, svc, delta)
+                if not conf:
+                    continue
+                try:
+                    storage = await storage_instance_from_config(conf, create=False, connector=conn)
+                    n = 0
+                    async for href, _etag in storage.list():
+                        if n >= MAX_ITEMS:
+                            break
+                        n += 1
+                        try:
+                            item, _ = await storage.get(href)
+                            title, sub = parse_item(item.raw)
+                            if title and item.uid:
+                                resolved += db.set_titles_by_uid(short, item.uid, title, sub)
+                        except Exception:
+                            continue
+                    done = True  # this side worked
+                except Exception as exc:
+                    errors.append(f"{short}: {exc}")
+                    continue
+    return {"resolved": resolved, "errors": errors}

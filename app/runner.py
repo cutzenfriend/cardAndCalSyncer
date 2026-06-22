@@ -275,6 +275,23 @@ class Runner:
             finally:
                 self.busy = False
 
+    # --- resolve activity titles (read-only backfill) ----------------------
+    async def resolve_names(self, pair: str | None = None,
+                            collection: str | None = None) -> dict[str, Any]:
+        async with self._lock:
+            self.busy = True
+            try:
+                if pair:
+                    return await enrich.resolve(self.store, self.db, pair, collection)
+                total, errs = 0, []
+                for pid in self.store.get()["pairs"]:
+                    r = await enrich.resolve(self.store, self.db, pid)
+                    total += r["resolved"]
+                    errs += r["errors"]
+                return {"resolved": total, "errors": errs}
+            finally:
+                self.busy = False
+
     # --- fix long UIDs (rewrites items) ------------------------------------
     async def fix_uids(self, pair: str, side: str, collection: str | None,
                        threshold: int, execute: bool) -> dict[str, Any]:

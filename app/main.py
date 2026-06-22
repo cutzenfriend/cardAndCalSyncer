@@ -580,6 +580,19 @@ async def api_sync(request: Request, _: str = Depends(require_api)):
     return {"ok": True, "started": True}
 
 
+@app.post("/api/resolve")
+async def api_resolve(request: Request, _: str = Depends(require_api)):
+    body: dict[str, Any] = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    if runner.busy:
+        raise HTTPException(409, "Another operation is running")
+    return await runner.resolve_names(pair=body.get("pair") or None,
+                                      collection=body.get("collection") or None)
+
+
 @app.post("/api/activity/clear")
 async def api_clear_activity(request: Request, _: str = Depends(require_api)):
     try:

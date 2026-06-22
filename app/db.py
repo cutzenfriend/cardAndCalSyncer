@@ -123,6 +123,17 @@ class Database:
             cur.execute("UPDATE activities SET title=?, subtitle=? WHERE id=?",
                         (title, subtitle, activity_id))
 
+    def set_titles_by_uid(self, collection: str, uid: str, title: str | None,
+                          subtitle: str | None) -> int:
+        """Backfill title/subtitle for activity rows matching (collection, uid)
+        that don't have a title yet. Returns rows updated."""
+        with self._cursor() as cur:
+            cur.execute(
+                "UPDATE activities SET title=?, subtitle=? "
+                "WHERE collection=? AND ident=? AND (title IS NULL OR title='')",
+                (title, subtitle, collection, uid))
+            return cur.rowcount
+
     def list_runs(self, limit: int = 50, offset: int = 0, kind: str | None = None) -> list[sqlite3.Row]:
         q = "SELECT * FROM runs"
         params: list[Any] = []
