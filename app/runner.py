@@ -35,7 +35,7 @@ class Runner:
 
     # --- subprocess --------------------------------------------------------
     async def _exec(self, cmd: list[str], secret_env: dict[str, str],
-                    run_id: int) -> tuple[int, list[str]]:
+                    run_id: int, timeout: int = 180) -> tuple[int, list[str]]:
         env = dict(os.environ)
         env.update(secret_env)
         env.setdefault("HOME", "/data")
@@ -50,13 +50,43 @@ class Runner:
                 stderr=asyncio.subprocess.STDOUT,
                 env=env,
             )
-            assert proc.stdout is not None
-            async for raw in proc.stdout:
-                line = raw.decode("utf-8", "replace").rstrip("\n")
-                lines.append(line)
-                rl.write(f"{_now()} {line}\n")
-            await proc.wait()
-        return proc.returncode or 0, lines
+
+            async def _drain() -> None:
+                assert proc.stdout is not None
+                async for raw in proc.stdout:
+                    line = raw.decode("utf-8", "replace").rstrip("\n")
+                    lines.append(line)
+                    rl.write(f"{_now()} {line}\n")
+                await proc.wait()
+
+            try:
+                # Bounds any hang (e.g. vdirsyncer trying its own OAuth browser flow).
+                await asyncio.wait_for(_drain(), timeout=timeout)
+            except asyncio.TimeoutError:
+                proc.kill()
+                msg = (f"[CaCs] aborted: timed out after {timeout}s "
+                       "(is the account connected and reachable?)")
+                lines.append(msg)
+                rl.write(f"{_now()} {msg}\n")
+                try:
+                    await proc.wait()
+                except Exception:
+                    pass
+        return (proc.returncode if proc.returncode is not None else -1), lines
+
+    def _unconnected_google(self, cfg: dict[str, Any], pair: str) -> list[str]:
+        """Names of Google accounts in this pair that have no OAuth token yet."""
+        p = cfg["pairs"][pair]
+        accs = cfg["accounts"]
+        svc = "cal" if p.get("service", "calendar") == "calendar" else "card"
+        missing = []
+        for aid in (p["a"], p["b"]):
+            a = accs.get(aid, {})
+            if a.get("kind") == "google":
+                tok = os.path.join(confgen.TOKEN_DIR, f"acc_{aid}_{svc}.token")
+                if not os.path.exists(tok):
+                    missing.append(a.get("name", aid))
+        return missing
 
     def _write_conf(self, path: str, text: str) -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -190,6 +220,24 @@ class Runner:
 
     async def _do_discover(self, run_id: int, cfg: dict[str, Any],
                            pair: str, list_all: bool) -> dict[str, Any]:
+        p = cfg["pairs"][pair]
+        accs = cfg["accounts"]
+
+        def _side(aid: str, colls: list | None = None) -> dict[str, Any]:
+            return {"account": aid, "name": accs.get(aid, {}).get("name", aid),
+                    "collections": colls or []}
+
+        # Fail fast (and clearly) if a Google account isn't connected yet —
+        # otherwise vdirsyncer would try its own browser OAuth flow and hang.
+        missing = self._unconnected_google(cfg, pair)
+        if missing:
+            msg = ("Not connected to Google: " + ", ".join(missing) +
+                   ". Open the account and click 'Connect Google' first.")
+            self.db.finish_run(run_id, status="failed", finished_at=_now(), rc=-1,
+                               n_create=0, n_update=0, n_delete=0, n_errors=1, log=msg)
+            return {"run_id": run_id, "status": "failed", "rc": -1, "error": msg,
+                    "a": _side(p["a"]), "b": _side(p["b"])}
+
         conf, secret_env = confgen.generate(cfg, only_pair=pair, list_all=list_all)
         self._write_conf(DISCOVER_CONF, conf)
 
@@ -200,10 +248,9 @@ class Runner:
 
         rc, lines = await self._exec(cmd, secret_env, run_id)
 
-        p = cfg["pairs"][pair]
         sa, sb = self.store.pair_storages(p)
-        known = {sa, sb}
-        discovered = parser.parse_discover_output(lines, known)
+        discovered = parser.parse_discover_output(lines, {sa, sb})
+        diag = parser.parse_sync_output(lines)  # reuse error/warning classifier
 
         # list-all prints the data before any possible abort -> consider it a
         # success as soon as at least one side was found.
@@ -215,18 +262,14 @@ class Runner:
             log="\n".join(lines),
         )
 
-        accs = cfg["accounts"]
-
         def colls_for(sn: str) -> list[dict[str, str]]:
             return [{"id": c.ident, "name": c.displayname} for c in discovered.get(sn, [])]
 
         out: dict[str, Any] = {
             "run_id": run_id, "status": status, "rc": rc,
-            "a": {"account": p["a"], "name": accs.get(p["a"], {}).get("name", p["a"]),
-                  "collections": colls_for(sa)},
-            "b": {"account": p["b"], "name": accs.get(p["b"], {}).get("name", p["b"]),
-                  "collections": colls_for(sb)},
+            "a": _side(p["a"], colls_for(sa)),
+            "b": _side(p["b"], colls_for(sb)),
+            "errors": diag.errors, "warnings": diag.warnings,
+            "log_tail": "\n".join(lines[-30:]),
         }
-        if not discovered:
-            out["log"] = "\n".join(lines[-20:])
         return out
