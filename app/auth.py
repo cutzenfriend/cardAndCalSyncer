@@ -1,7 +1,7 @@
-"""Einfache Web-Authentifizierung: ein Admin-Account, Session-Cookie, Remember-Me.
+"""Simple web authentication: a single admin account, session cookie, remember-me.
 
-Passwort-Hash via PBKDF2 (stdlib). Session-Token = HMAC-signiertes JSON.
-Admin-Daten + Secret liegen in der Config (cfg['auth']).
+Password hashing via PBKDF2 (stdlib). Session token = HMAC-signed JSON.
+Admin data + secret live in the config (cfg['auth']).
 """
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from typing import Any
 from store import ConfigStore
 
 _PBKDF2_ITERS = 200_000
-REMEMBER_AGE = 30 * 24 * 3600      # 30 Tage
-SESSION_AGE = 12 * 3600            # ohne Remember-Me serverseitiges Limit
+REMEMBER_AGE = 30 * 24 * 3600      # 30 days
+SESSION_AGE = 12 * 3600            # server-side limit without remember-me
 COOKIE_NAME = "cacs_session"
 
 
@@ -39,7 +39,7 @@ class Auth:
     def __init__(self, store: ConfigStore):
         self.store = store
 
-    # --- Admin-Account -----------------------------------------------------
+    # --- admin account -----------------------------------------------------
     def is_configured(self) -> bool:
         a = self.store.get()["auth"]
         return bool(a.get("username") and a.get("pw_hash"))
@@ -59,7 +59,7 @@ class Auth:
         _, h = hash_password(password, a["pw_salt"])
         return hmac.compare_digest(h, a["pw_hash"])
 
-    # --- Session-Token -----------------------------------------------------
+    # --- session token -----------------------------------------------------
     def _secret(self) -> bytes:
         return (self.store.get()["auth"].get("secret") or "").encode()
 

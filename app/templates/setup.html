@@ -1,20 +1,20 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ app_name }} · Einrichtung</title>
+  <title>{{ app_name }} · Setup</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="authpage">
   <div class="authcard">
     <div class="brand big">Ca<span>Cs</span></div>
-    <p class="sub">cardAndCalSyncer · Ersteinrichtung</p>
-    <p class="hint">Lege das Administrator-Konto für das Web-UI an.</p>
+    <p class="sub">cardAndCalSyncer · First-time setup</p>
+    <p class="hint">Create the administrator account for the web UI.</p>
     <form id="f" onsubmit="return submitForm(event)">
-      <label>Benutzername<input id="u" autocomplete="username" required></label>
-      <label>Passwort<input id="p" type="password" autocomplete="new-password" minlength="6" required></label>
-      <label>Passwort wiederholen<input id="p2" type="password" autocomplete="new-password" required></label>
-      <button class="btn primary wide" type="submit">Konto anlegen</button>
+      <label>Username<input id="u" autocomplete="username" required></label>
+      <label>Password<input id="p" type="password" autocomplete="new-password" minlength="6" required></label>
+      <label>Repeat password<input id="p2" type="password" autocomplete="new-password" required></label>
+      <button class="btn primary wide" type="submit">Create account</button>
       <p id="msg" class="err"></p>
     </form>
   </div>
@@ -23,10 +23,10 @@
     e.preventDefault();
     const p=document.getElementById('p').value, p2=document.getElementById('p2').value;
     const msg=document.getElementById('msg');
-    if(p!==p2){ msg.textContent='Passwörter stimmen nicht überein'; return false; }
+    if(p!==p2){ msg.textContent='Passwords do not match'; return false; }
     const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({username:document.getElementById('u').value,password:p})});
-    if(r.ok){ location.href='/'; } else { msg.textContent=(await r.json()).detail||'Fehler'; }
+    if(r.ok){ location.href='/'; } else { msg.textContent=(await r.json()).detail||'Error'; }
     return false;
   }
   </script>

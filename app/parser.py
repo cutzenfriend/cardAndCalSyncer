@@ -1,18 +1,18 @@
-"""Parser fuer vdirsyncer-Ausgabe (v0.20, click_log).
+"""Parser for vdirsyncer output (v0.20, click_log).
 
-vdirsyncer loggt INFO-Zeilen ohne Prefix auf stderr, z.B.:
-    Syncing calendars/arbeit
-    Copying (uploading) item <uid> to google_calendar/arbeit
-    Copying (updating) item <uid> to icloud_calendar/arbeit
-    Deleting item <uid> from google_calendar/arbeit
-Fehler/Warnungen werden von click_log mit Level-Prefix versehen:
+vdirsyncer logs INFO lines without a prefix to stderr, e.g.:
+    Syncing calendars/work
+    Copying (uploading) item <uid> to google_calendar/work
+    Copying (updating) item <uid> to icloud_calendar/work
+    Deleting item <uid> from google_calendar/work
+Errors/warnings get a level prefix from click_log:
     error: ...
     warning: ...
 
-Discover gibt pro Storage einen Block aus:
+Discover prints one block per storage:
     icloud_calendar:
-      - "11111111-..." ("Arbeit")
-      - "domenik@gmail.com" ("Privat")
+      - "11111111-..." ("Work")
+      - "domenik@gmail.com" ("Personal")
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ import json
 import re
 from dataclasses import dataclass, field
 
-# --- Sync ------------------------------------------------------------------
+# --- sync ------------------------------------------------------------------
 
 _COPY = re.compile(
     r"Copying \((?P<op>uploading|updating)\) item (?P<ident>.+?) to (?P<storage>\S+)\s*$"
@@ -35,9 +35,9 @@ _OP_TO_ACTION = {"uploading": "create", "updating": "update"}
 @dataclass
 class Activity:
     action: str          # create | update | delete
-    ident: str           # item-UID
-    dest_storage: str     # instance_name der Zielseite, z.B. "google_calendar"
-    collection: str       # Kurzname, z.B. "arbeit"
+    ident: str           # item UID
+    dest_storage: str     # instance_name of the target side, e.g. "google_calendar"
+    collection: str       # short name, e.g. "work"
     raw: str
 
 
@@ -65,7 +65,7 @@ def _activity_from_storage(action: str, ident: str, storage: str, raw: str) -> A
 
 
 def parse_sync_line(line: str) -> Activity | None:
-    """Eine einzelne Logzeile auf eine Sync-Aktivitaet pruefen."""
+    """Check a single log line for a sync activity."""
     line = line.rstrip("\n")
     m = _COPY.search(line)
     if m:
@@ -79,7 +79,7 @@ def parse_sync_line(line: str) -> Activity | None:
 
 
 def classify_line(line: str) -> tuple[str, str] | None:
-    """error/warning-Zeilen erkennen -> ('error'|'warning', msg)."""
+    """Detect error/warning lines -> ('error'|'warning', msg)."""
     m = _LEVEL.match(line.strip())
     if m:
         lvl = m.group("level").lower()
@@ -105,7 +105,7 @@ def parse_sync_output(lines: list[str]) -> ParsedRun:
     return run
 
 
-# --- Discover --------------------------------------------------------------
+# --- discover --------------------------------------------------------------
 
 _DISC_HEADER = re.compile(r"^(?P<name>[A-Za-z0-9_.\-]+):\s*$")
 _DISC_ITEM = re.compile(
@@ -120,10 +120,10 @@ class DiscoveredCollection:
 
 
 def parse_discover_output(lines: list[str], known_storages: set[str]) -> dict[str, list[DiscoveredCollection]]:
-    """Discover-Ausgabe -> {storage_name: [DiscoveredCollection, ...]}.
+    """Discover output -> {storage_name: [DiscoveredCollection, ...]}.
 
-    Nur Bloecke, deren Header ein bekannter Storage-Name ist, werden uebernommen
-    (so faellt eine evtl. Pair-Ueberschrift weg).
+    Only blocks whose header is a known storage name are kept (so any pair
+    heading is ignored).
     """
     result: dict[str, list[DiscoveredCollection]] = {}
     current: str | None = None
@@ -148,7 +148,7 @@ def parse_discover_output(lines: list[str], known_storages: set[str]) -> dict[st
                 DiscoveredCollection(ident=ident, displayname=m.group("name") or "")
             )
         else:
-            # Zeile ohne Einrueckung beendet ggf. den Block
+            # a non-indented line ends the current block
             if line and not line.startswith(" "):
                 current = None
     return result

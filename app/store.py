@@ -1,13 +1,13 @@
-"""Konfigurations-Store: das Web-UI ist Source-of-Truth.
+"""Configuration store: the web UI is the source of truth.
 
-Modell:
+Model:
   accounts[<id>]  = { name, kind, ... }        # kind: icloud | google | caldav
   pairs[<id>]     = { name, service, a, b, conflict_resolution, collections }
   auth            = { username, pw_salt, pw_hash, secret }
   alerts          = { apprise_urls, on_failure, on_recovery }
 
-Storages werden pro (Account, Service) generiert; der Storage-Name ist
-deterministisch (siehe storage_name) und taucht so in den vdirsyncer-Logs auf.
+A storage is generated per (account, service); its name is deterministic (see
+storage_name) and is exactly what shows up in the vdirsyncer logs.
 """
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ import threading
 from copy import deepcopy
 from typing import Any
 
-# kind -> menschlicher Default-Name (UI-Presets liefern den Rest)
+# kind -> human-friendly default label (UI presets provide the rest)
 KIND_LABEL = {"icloud": "iCloud", "google": "Google", "caldav": "CalDAV/CardDAV"}
 
-# Felder, die als Secret gelten (nie in vdirsyncer.conf, nur per env)
+# fields treated as secrets (never written to vdirsyncer.conf, only via env)
 SECRET_FIELDS = {"password", "client_secret", "client_id"}
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -34,7 +34,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 def storage_name(account_id: str, service: str) -> str:
-    """Deterministischer vdirsyncer-Storage-Name für (Account, Service)."""
+    """Deterministic vdirsyncer storage name for (account, service)."""
     suf = "cal" if service == "calendar" else "card"
     return f"acc_{account_id}_{suf}"
 
@@ -82,7 +82,7 @@ class ConfigStore:
             return deepcopy(self._cfg)
 
     def replace(self, key: str, value: Any) -> None:
-        """Ersetzt einen Top-Level-Key komplett (z.B. accounts/pairs)."""
+        """Replace a whole top-level key (e.g. accounts/pairs)."""
         with self._lock:
             self._cfg[key] = value
             self._persist()
@@ -98,9 +98,9 @@ class ConfigStore:
         except OSError:
             pass
 
-    # --- abgeleitete Helfer ------------------------------------------------
+    # --- derived helpers ---------------------------------------------------
     def public_view(self) -> dict[str, Any]:
-        """Config fürs UI: Secrets maskiert, auth/secret entfernt."""
+        """Config for the UI: secrets masked, auth/secret removed."""
         cfg = self.get()
         for acc in cfg["accounts"].values():
             for fld in list(acc):
@@ -117,7 +117,7 @@ class ConfigStore:
         return storage_name(pair["a"], svc), storage_name(pair["b"], svc)
 
     def resolve_dest(self, dest_storage: str) -> dict[str, Any] | None:
-        """Aus dem Ziel-Storage einer Aktivität Paar + Quelle/Ziel-Account lesen."""
+        """From an activity's destination storage, derive pair + source/target account."""
         cfg = self.get()
         accs = cfg["accounts"]
         for pid, p in cfg["pairs"].items():

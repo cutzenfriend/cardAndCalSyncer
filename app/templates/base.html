@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,13 +11,13 @@
     <a class="brand" href="/">Ca<span>Cs</span></a>
     <nav>
       <a href="/" class="{% block nav_dash %}{% endblock %}">Dashboard</a>
-      <a href="/activity" class="{% block nav_act %}{% endblock %}">Aktivität</a>
-      <a href="/runs" class="{% block nav_runs %}{% endblock %}">Läufe</a>
+      <a href="/activity" class="{% block nav_act %}{% endblock %}">Activity</a>
+      <a href="/runs" class="{% block nav_runs %}{% endblock %}">Runs</a>
       <a href="/logs" class="{% block nav_logs %}{% endblock %}">Logs</a>
-      <a href="/config" class="{% block nav_cfg %}{% endblock %}">Konfiguration</a>
+      <a href="/config" class="{% block nav_cfg %}{% endblock %}">Configuration</a>
     </nav>
     <span id="livebadge" class="badge badge-idle">…</span>
-    <a href="/logout" class="logout" title="Abmelden">⎋</a>
+    <a href="/logout" class="logout" title="Sign out">⎋</a>
   </header>
   <main class="container">
     {% block content %}{% endblock %}
@@ -33,10 +33,10 @@
       try{
         const s = await api('/api/status');
         const b = document.getElementById('livebadge');
-        if(s.busy){ b.textContent='Sync läuft…'; b.className='badge badge-run'; }
-        else if(!s.sync_enabled){ b.textContent='pausiert'; b.className='badge badge-off'; }
-        else { const eta = s.next_run_in!=null ? ' · nächster in '+s.next_run_in+'s':'';
-               b.textContent='aktiv'+eta; b.className='badge badge-ok'; }
+        if(s.busy){ b.textContent='Sync running…'; b.className='badge badge-run'; }
+        else if(!s.sync_enabled){ b.textContent='paused'; b.className='badge badge-off'; }
+        else { const eta = s.next_run_in!=null ? ' · next in '+s.next_run_in+'s':'';
+               b.textContent='active'+eta; b.className='badge badge-ok'; }
       }catch(e){ /* ignore */ }
     }
     setInterval(refreshBadge, 4000); refreshBadge();

@@ -1,20 +1,20 @@
 {% extends "base.html" %}
-{% block title %}calSync · Läufe{% endblock %}
+{% block title %}{{ app_name }} · Runs{% endblock %}
 {% block nav_runs %}active{% endblock %}
 {% block content %}
-<h1>Läufe</h1>
+<h1>Runs</h1>
 <table class="tbl">
-  <thead><tr><th>#</th><th>Art</th><th>Paar</th><th>Start</th><th>Trigger</th><th>Status</th><th>+ ~ −</th><th>Fehler</th></tr></thead>
+  <thead><tr><th>#</th><th>Kind</th><th>Pair</th><th>Started</th><th>Trigger</th><th>Status</th><th>+ ~ −</th><th>Errors</th></tr></thead>
   <tbody>
   {% for r in runs %}
     <tr onclick="location='/runs/{{ r.id }}'" class="click">
-      <td>{{ r.id }}</td><td>{{ r.kind }}</td><td>{{ r.pair or 'alle' }}</td>
+      <td>{{ r.id }}</td><td>{{ r.kind }}</td><td>{{ r.pair or 'all' }}</td>
       <td class="nowrap">{{ r.started_at }}</td><td>{{ r.trigger }}</td>
       <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
       <td>{{ r.n_create }} / {{ r.n_update }} / {{ r.n_delete }}</td>
       <td>{{ r.n_errors }}</td>
     </tr>
-  {% else %}<tr><td colspan="8" class="muted">Noch keine Läufe.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="8" class="muted">No runs yet.</td></tr>{% endfor %}
   </tbody>
 </table>
 {% endblock %}

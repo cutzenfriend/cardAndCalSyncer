@@ -1,4 +1,4 @@
-"""SQLite-Speicher fuer Sync-Laeufe und Aktivitaeten."""
+"""SQLite store for sync runs and activities."""
 from __future__ import annotations
 
 import sqlite3
@@ -10,7 +10,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     kind         TEXT NOT NULL,            -- sync | discover
-    pair         TEXT,                     -- pair-name oder NULL (=alle)
+    pair         TEXT,                     -- pair name or NULL (=all)
     trigger      TEXT NOT NULL,            -- scheduled | manual
     status       TEXT NOT NULL,            -- running | success | failed
     started_at   TEXT NOT NULL,
@@ -31,9 +31,9 @@ CREATE TABLE IF NOT EXISTS activities (
     ident       TEXT NOT NULL,
     pair        TEXT,
     collection  TEXT,
-    src_name    TEXT,                       -- Quell-Account (Name)
+    src_name    TEXT,                       -- source account (name)
     src_kind    TEXT,                       -- icloud | google | caldav
-    dst_name    TEXT,                       -- Ziel-Account (Name)
+    dst_name    TEXT,                       -- target account (name)
     dst_kind    TEXT
 );
 
@@ -151,7 +151,7 @@ class Database:
             return {"create": r["c"], "update": r["u"], "delete": r["d"]}
 
     def prune_runs(self, keep: int = 500) -> None:
-        """Aelteste Runs ueber `keep` hinaus loeschen (Activities via Cascade)."""
+        """Delete runs older than the newest `keep` (activities via cascade)."""
         with self._cursor() as cur:
             cur.execute(
                 "DELETE FROM runs WHERE id NOT IN "

@@ -1,9 +1,9 @@
-"""Benachrichtigungen via Apprise (E-Mail, Telegram, ntfy, Discord, ...)."""
+"""Notifications via Apprise (email, Telegram, ntfy, Discord, ...)."""
 from __future__ import annotations
 
 import logging
 
-log = logging.getLogger("calsync.alerts")
+log = logging.getLogger("cacs.alerts")
 
 try:
     import apprise  # type: ignore
@@ -12,14 +12,14 @@ except Exception:  # pragma: no cover
 
 
 def notify(urls: list[str], title: str, body: str, *, kind: str = "info") -> bool:
-    """Schickt eine Nachricht an alle konfigurierten Apprise-URLs.
+    """Send a message to all configured Apprise URLs.
 
-    kind: info | success | warning | failure  (Mapping auf Apprise NotifyType)
+    kind: info | success | warning | failure  (mapped to Apprise NotifyType)
     """
     if not urls:
         return False
     if apprise is None:
-        log.warning("apprise nicht installiert – Alert unterdrueckt: %s", title)
+        log.warning("apprise not installed – alert suppressed: %s", title)
         return False
 
     notify_type = {
@@ -33,7 +33,7 @@ def notify(urls: list[str], title: str, body: str, *, kind: str = "info") -> boo
         if url and ap.add(url):
             added += 1
     if not added:
-        log.warning("keine gueltige Apprise-URL konfiguriert")
+        log.warning("no valid Apprise URL configured")
         return False
     try:
         return bool(ap.notify(
@@ -42,5 +42,5 @@ def notify(urls: list[str], title: str, body: str, *, kind: str = "info") -> boo
                                 apprise.NotifyType.INFO),
         ))
     except Exception as exc:  # pragma: no cover
-        log.exception("Alert fehlgeschlagen: %s", exc)
+        log.exception("alert failed: %s", exc)
         return False

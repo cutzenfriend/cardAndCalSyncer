@@ -1,35 +1,35 @@
 {% extends "base.html" %}
-{% block title %}calSync · Dashboard{% endblock %}
+{% block title %}{{ app_name }} · Dashboard{% endblock %}
 {% block nav_dash %}active{% endblock %}
 {% block content %}
 <div class="row gap">
-  <button class="btn primary" onclick="syncNow()">Jetzt synchronisieren</button>
+  <button class="btn primary" onclick="syncNow()">Sync now</button>
   <button class="btn" id="toggleBtn" onclick="toggleSync()">…</button>
-  <a class="btn" href="/config">Konfiguration</a>
+  <a class="btn" href="/config">Configuration</a>
 </div>
 
 {% if not status.ready %}
-<div class="note warn">⚠️ Noch nicht startklar – bitte unter <a href="/config">Konfiguration</a>
-Zugangsdaten eintragen und Kalender/Adressbücher mappen.</div>
+<div class="note warn">⚠️ Not ready yet — please add credentials and map calendars/address books
+under <a href="/config">Configuration</a>.</div>
 {% endif %}
 
 <section class="cards">
   <div class="card"><div class="k">Status</div>
-    <div class="v">{% if status.sync_enabled %}aktiv{% else %}pausiert{% endif %}</div>
-    <div class="sub">Intervall {{ status.interval_seconds }}s</div></div>
-  <div class="card"><div class="k">Letzter Lauf</div>
+    <div class="v">{% if status.sync_enabled %}active{% else %}paused{% endif %}</div>
+    <div class="sub">Interval {{ status.interval_seconds }}s</div></div>
+  <div class="card"><div class="k">Last run</div>
     {% if status.last_run %}
       <div class="v {{ 'ok' if status.last_run.status=='success' else 'bad' }}">{{ status.last_run.status }}</div>
       <div class="sub">{{ status.last_run.finished_at or status.last_run.started_at }}</div>
     {% else %}<div class="v">–</div>{% endif %}</div>
-  <div class="card"><div class="k">Erstellt gesamt</div><div class="v">{{ status.totals['create'] }}</div></div>
-  <div class="card"><div class="k">Aktualisiert</div><div class="v">{{ status.totals['update'] }}</div></div>
-  <div class="card"><div class="k">Gelöscht</div><div class="v">{{ status.totals['delete'] }}</div></div>
+  <div class="card"><div class="k">Created total</div><div class="v">{{ status.totals['create'] }}</div></div>
+  <div class="card"><div class="k">Updated</div><div class="v">{{ status.totals['update'] }}</div></div>
+  <div class="card"><div class="k">Deleted</div><div class="v">{{ status.totals['delete'] }}</div></div>
 </section>
 
-<h2>Letzte Läufe</h2>
+<h2>Recent runs</h2>
 <table class="tbl">
-  <thead><tr><th>#</th><th>Zeit</th><th>Trigger</th><th>Status</th><th>+ ~ −</th><th>Fehler</th></tr></thead>
+  <thead><tr><th>#</th><th>Time</th><th>Trigger</th><th>Status</th><th>+ ~ −</th><th>Errors</th></tr></thead>
   <tbody>
   {% for r in runs %}
     <tr onclick="location='/runs/{{ r.id }}'" class="click">
@@ -38,19 +38,19 @@ Zugangsdaten eintragen und Kalender/Adressbücher mappen.</div>
       <td>{{ r.n_create }} / {{ r.n_update }} / {{ r.n_delete }}</td>
       <td>{{ r.n_errors }}</td>
     </tr>
-  {% else %}<tr><td colspan="6" class="muted">Noch keine Läufe.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="6" class="muted">No runs yet.</td></tr>{% endfor %}
   </tbody>
 </table>
 
-<h2>Neueste Aktivität</h2>
+<h2>Latest activity</h2>
 {% include "_activity_table.html" %}
 {% endblock %}
 
 {% block scripts %}
 <script>
-  async function syncNow(){ try{ await api('/api/sync',{method:'POST',body:'{}'}); toast('Sync gestartet'); setTimeout(()=>location.reload(),1500);}catch(e){toast(e.message,true);} }
+  async function syncNow(){ try{ await api('/api/sync',{method:'POST',body:'{}'}); toast('Sync started'); setTimeout(()=>location.reload(),1500);}catch(e){toast(e.message,true);} }
   async function refreshToggle(){ const s=await api('/api/status'); const b=document.getElementById('toggleBtn');
-    b.textContent = s.sync_enabled ? 'Pausieren' : 'Fortsetzen'; b.dataset.on=s.sync_enabled?'1':'0'; }
+    b.textContent = s.sync_enabled ? 'Pause' : 'Resume'; b.dataset.on=s.sync_enabled?'1':'0'; }
   async function toggleSync(){ const b=document.getElementById('toggleBtn'); const on=b.dataset.on==='1';
     await api('/api/toggle',{method:'POST',body:JSON.stringify({enabled:!on})}); refreshToggle(); }
   function toast(m,bad){ const t=document.createElement('div'); t.className='toast'+(bad?' bad':''); t.textContent=m;

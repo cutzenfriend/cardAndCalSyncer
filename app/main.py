@@ -1,4 +1,4 @@
-"""CaCs – cardAndCalSyncer. Web-UI + Scheduler rund um vdirsyncer."""
+"""CaCs – cardAndCalSyncer. Web UI + scheduler around vdirsyncer."""
 from __future__ import annotations
 
 import asyncio
@@ -61,22 +61,22 @@ async def _scheduler() -> None:
             try:
                 await runner.run_sync(trigger="scheduled")
             except Exception:
-                log.exception("Scheduler-Sync fehlgeschlagen")
+                log.exception("Scheduled sync failed")
         sched.next_run_at = time.time() + interval
         await asyncio.sleep(interval)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # optionales Bootstrap eines Admins per Env (headless)
+    # optional admin bootstrap via env (headless)
     if not auth.is_configured():
         u, p = os.environ.get("ADMIN_USERNAME"), os.environ.get("ADMIN_PASSWORD")
         if u and p:
             auth.set_admin(u, p)
-            log.info("Admin aus ADMIN_USERNAME/ADMIN_PASSWORD angelegt")
+            log.info("Admin created from ADMIN_USERNAME/ADMIN_PASSWORD")
     task = asyncio.create_task(_scheduler())
     _bg_tasks.add(task)
-    log.info("%s gestartet – Daten: %s", APP_NAME, DATA_DIR)
+    log.info("%s started – data dir: %s", APP_NAME, DATA_DIR)
     yield
     task.cancel()
 
@@ -85,7 +85,7 @@ app = FastAPI(title=APP_NAME, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=os.path.join(APP_DIR, "static")), name="static")
 
 
-# --- Auth-Guards -----------------------------------------------------------
+# --- Auth guards -----------------------------------------------------------
 class NeedsSetup(Exception): ...
 class NeedsLogin(Exception): ...
 
@@ -115,10 +115,10 @@ def require_page(request: Request) -> str:
 
 def require_api(request: Request) -> str:
     if not auth.is_configured():
-        raise HTTPException(403, "Setup erforderlich")
+        raise HTTPException(403, "Setup required")
     u = current_user(request)
     if not u:
-        raise HTTPException(401, "Nicht angemeldet")
+        raise HTTPException(401, "Not signed in")
     return u
 
 
@@ -151,7 +151,7 @@ def _status_payload() -> dict[str, Any]:
     }
 
 
-# --- Setup & Login ---------------------------------------------------------
+# --- Setup & login ---------------------------------------------------------
 @app.get("/setup", response_class=HTMLResponse)
 def setup_page(request: Request):
     if auth.is_configured():
@@ -162,11 +162,11 @@ def setup_page(request: Request):
 @app.post("/api/setup")
 async def api_setup(request: Request):
     if auth.is_configured():
-        raise HTTPException(409, "Bereits eingerichtet")
+        raise HTTPException(409, "Already configured")
     body = await request.json()
     u, p = (body.get("username") or "").strip(), body.get("password") or ""
     if len(u) < 2 or len(p) < 6:
-        raise HTTPException(400, "Benutzername min. 2, Passwort min. 6 Zeichen")
+        raise HTTPException(400, "Username min. 2, password min. 6 characters")
     auth.set_admin(u, p)
     resp = JSONResponse({"ok": True})
     _set_session(resp, u, remember=False)
@@ -187,7 +187,7 @@ async def api_login(request: Request):
     body = await request.json()
     u, p = (body.get("username") or "").strip(), body.get("password") or ""
     if not auth.verify_password(u, p):
-        raise HTTPException(401, "Benutzername oder Passwort falsch")
+        raise HTTPException(401, "Wrong username or password")
     resp = JSONResponse({"ok": True})
     _set_session(resp, u, remember=bool(body.get("remember")))
     return resp
@@ -200,7 +200,7 @@ def logout():
     return resp
 
 
-# --- HTML-Seiten -----------------------------------------------------------
+# --- HTML pages ------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, _: str = Depends(require_page)):
     return templates.TemplateResponse("dashboard.html", {
@@ -220,7 +220,7 @@ def runs_page(request: Request, _: str = Depends(require_page)):
 def run_detail(run_id: int, request: Request, _: str = Depends(require_page)):
     run = db.get_run(run_id)
     if not run:
-        raise HTTPException(404, "Run nicht gefunden")
+        raise HTTPException(404, "Run not found")
     return templates.TemplateResponse("run_detail.html", {
         "request": request, "run": dict(run),
         "activities": [dict(a) for a in db.run_activities(run_id)]})
@@ -247,7 +247,7 @@ def config_page(request: Request, _: str = Depends(require_page)):
         "request": request, "config": store.public_view()})
 
 
-# --- API: Status/Config ----------------------------------------------------
+# --- API: status/config ----------------------------------------------------
 @app.get("/api/status")
 def api_status(_: str = Depends(require_api)):
     return _status_payload()
@@ -266,12 +266,12 @@ async def api_save_config(request: Request, _: str = Depends(require_api)):
     return {"ok": True, "ready": _ready_to_sync(cfg)}
 
 
-# --- API: Accounts ----------------------------------------------------------
+# --- API: accounts ----------------------------------------------------------
 def _apply_secrets(target: dict[str, Any], incoming: dict[str, Any]) -> None:
     from store import SECRET_FIELDS
     for fld, val in incoming.items():
         if fld in SECRET_FIELDS and val == "__SET__":
-            continue  # maskiert -> bestehenden Wert behalten
+            continue  # masked -> keep existing value
         target[fld] = val
 
 
@@ -294,23 +294,23 @@ def api_del_account(acc_id: str, _: str = Depends(require_api)):
     used = [p.get("name") or pid for pid, p in cfg["pairs"].items()
             if acc_id in (p.get("a"), p.get("b"))]
     if used:
-        raise HTTPException(409, f"Account wird von Paar(en) genutzt: {', '.join(used)}")
+        raise HTTPException(409, f"Account is used by pair(s): {', '.join(used)}")
     accounts = cfg["accounts"]
     accounts.pop(acc_id, None)
     store.replace("accounts", accounts)
     return {"ok": True, "config": store.public_view()}
 
 
-# --- API: Pairs -------------------------------------------------------------
+# --- API: pairs -------------------------------------------------------------
 @app.post("/api/pairs")
 async def api_save_pair(request: Request, _: str = Depends(require_api)):
     body = await request.json()
     cfg = store.get()
     a, b = body.get("a"), body.get("b")
     if a not in cfg["accounts"] or b not in cfg["accounts"]:
-        raise HTTPException(400, "Unbekannter Account")
+        raise HTTPException(400, "Unknown account")
     if a == b:
-        raise HTTPException(400, "A und B müssen verschieden sein")
+        raise HTTPException(400, "A and B must be different")
     pairs = cfg["pairs"]
     pid = body.get("id") or secrets.token_hex(4)
     pairs[pid] = {
@@ -322,7 +322,7 @@ async def api_save_pair(request: Request, _: str = Depends(require_api)):
     }
     store.replace("pairs", pairs)
     if pairs[pid]["collections"]:
-        _spawn(runner.discover(pid, list_all=False))  # Mappings registrieren
+        _spawn(runner.discover(pid, list_all=False))  # register mappings
     return {"ok": True, "id": pid, "config": store.public_view()}
 
 
@@ -334,15 +334,15 @@ def api_del_pair(pair_id: str, _: str = Depends(require_api)):
     return {"ok": True, "config": store.public_view()}
 
 
-# --- API: Aktionen ----------------------------------------------------------
+# --- API: actions -----------------------------------------------------------
 @app.post("/api/discover")
 async def api_discover(request: Request, _: str = Depends(require_api)):
     body = await request.json()
     pair = body.get("pair")
     if pair not in store.get()["pairs"]:
-        raise HTTPException(400, "Unbekanntes Paar")
+        raise HTTPException(400, "Unknown pair")
     if runner.busy:
-        raise HTTPException(409, "Es läuft gerade ein anderer Vorgang")
+        raise HTTPException(409, "Another operation is already running")
     return await runner.discover(pair, list_all=True)
 
 
@@ -354,7 +354,7 @@ async def api_sync(request: Request, _: str = Depends(require_api)):
     except Exception:
         pass
     if runner.busy:
-        raise HTTPException(409, "Sync läuft bereits")
+        raise HTTPException(409, "Sync already running")
     _spawn(runner.run_sync(pair=body.get("pair") or None, trigger="manual"))
     return {"ok": True, "started": True}
 
@@ -370,7 +370,7 @@ async def api_toggle(request: Request, _: str = Depends(require_api)):
 @app.get("/api/logs", response_class=PlainTextResponse)
 def api_logs(lines: int = 400, _: str = Depends(require_api)):
     if not os.path.exists(ROLLING_LOG):
-        return "Noch keine Logs."
+        return "No logs yet."
     with open(ROLLING_LOG, encoding="utf-8", errors="replace") as f:
         return "".join(f.readlines()[-lines:])
 

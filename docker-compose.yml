@@ -6,17 +6,17 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
-      - "8080:8080"          # Web-UI:  http://<host>:8080
+      - "8080:8080"          # Web UI:  http://<host>:8080
     environment:
-      SYNC_INTERVAL: "300"   # Standard-Intervall (im UI änderbar)
+      SYNC_INTERVAL: "300"   # default interval (changeable in the UI)
       LOG_LEVEL: "INFO"
-      # Optionales Admin-Bootstrap (sonst Ersteinrichtung im Browser unter /setup):
+      # Optional admin bootstrap (otherwise first-time setup in the browser at /setup):
       ADMIN_USERNAME: "${ADMIN_USERNAME:-}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
     volumes:
-      # Bind-Mounts (keine named volumes):
-      - /opt/docker-volumes/cacs/config:/config   # generierte vdirsyncer.conf
-      - /opt/docker-volumes/cacs/data:/data       # DB, UI-Config, OAuth-Token, Sync-Status
+      # Bind mounts (no named volumes):
+      - /opt/docker-volumes/cacs/config:/config   # generated vdirsyncer.conf
+      - /opt/docker-volumes/cacs/data:/data       # DB, UI config, OAuth tokens, sync status
       - /opt/docker-volumes/cacs/logs:/logs       # vdirsyncer.log
     healthcheck:
       test: ["CMD", "python", "-c",

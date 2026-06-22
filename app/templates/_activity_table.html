@@ -1,11 +1,11 @@
 <table class="tbl">
-  <thead><tr><th>Zeit</th><th>Aktion</th><th>Paar</th><th>Kalender</th><th>Richtung</th><th>Objekt (UID)</th></tr></thead>
+  <thead><tr><th>Time</th><th>Action</th><th>Pair</th><th>Collection</th><th>Direction</th><th>Object (UID)</th></tr></thead>
   <tbody>
   {% for a in activities %}
     <tr>
       <td class="nowrap">{{ a.ts }}</td>
       <td><span class="act act-{{ a.action }}">
-        {% if a.action=='create' %}erstellt{% elif a.action=='update' %}geändert{% else %}gelöscht{% endif %}
+        {% if a.action=='create' %}created{% elif a.action=='update' %}updated{% else %}deleted{% endif %}
       </span></td>
       <td>{{ a.pair or '–' }}</td>
       <td>{{ a.collection or '–' }}</td>
@@ -15,6 +15,6 @@
       </td>
       <td class="uid">{{ a.ident }}</td>
     </tr>
-  {% else %}<tr><td colspan="6" class="muted">Keine Aktivität.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="6" class="muted">No activity.</td></tr>{% endfor %}
   </tbody>
 </table>

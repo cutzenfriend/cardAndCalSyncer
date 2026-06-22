@@ -1,4 +1,4 @@
-# CaCs – cardAndCalSyncer (vdirsyncer + FastAPI Web-UI/Scheduler)
+# CaCs – cardAndCalSyncer (vdirsyncer + FastAPI web UI/scheduler)
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -6,7 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && useradd -r -u 1000 -m cacs
 
-# Module liegen flach in /app (main.py importiert "from db import ...")
+# Modules live flat in /app (main.py imports "from db import ...")
 COPY app/ /app/
 
 ENV CACS_DATA=/data \

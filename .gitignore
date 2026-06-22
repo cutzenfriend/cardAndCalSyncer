@@ -1,4 +1,4 @@
-# --- Secrets & Laufzeitdaten ---
+# --- secrets & runtime data ---
 .env
 data/
 logs/
@@ -16,7 +16,7 @@ __pycache__/
 venv/
 *.egg-info/
 
-# --- Claude / KI-Artefakte ---
+# --- Claude / AI artifacts ---
 .claude/
 CLAUDE.md
 .clauderc
@@ -24,7 +24,7 @@ CLAUDE.md
 .cursor/
 .aider*
 
-# --- OS / Editor ---
+# --- OS / editor ---
 .DS_Store
 Thumbs.db
 .idea/

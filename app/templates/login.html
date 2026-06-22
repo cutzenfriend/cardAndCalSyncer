@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ app_name }} · Login</title>
@@ -10,10 +10,10 @@
     <div class="brand big">Ca<span>Cs</span></div>
     <p class="sub">cardAndCalSyncer</p>
     <form id="f" onsubmit="return submitForm(event)">
-      <label>Benutzername<input id="u" autocomplete="username" required></label>
-      <label>Passwort<input id="p" type="password" autocomplete="current-password" required></label>
-      <label class="chk"><input id="r" type="checkbox"> Angemeldet bleiben</label>
-      <button class="btn primary wide" type="submit">Anmelden</button>
+      <label>Username<input id="u" autocomplete="username" required></label>
+      <label>Password<input id="p" type="password" autocomplete="current-password" required></label>
+      <label class="chk"><input id="r" type="checkbox"> Stay signed in</label>
+      <button class="btn primary wide" type="submit">Sign in</button>
       <p id="msg" class="err"></p>
     </form>
   </div>
@@ -23,7 +23,7 @@
     const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({username:document.getElementById('u').value,
         password:document.getElementById('p').value, remember:document.getElementById('r').checked})});
-    if(r.ok){ location.href='/'; } else { document.getElementById('msg').textContent=(await r.json()).detail||'Fehler'; }
+    if(r.ok){ location.href='/'; } else { document.getElementById('msg').textContent=(await r.json()).detail||'Error'; }
     return false;
   }
   </script>

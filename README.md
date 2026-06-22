@@ -1,33 +1,33 @@
 # CaCs · cardAndCalSyncer
 
-Selbst gehosteter, bidirektionaler Sync für **Kalender und Kontakte** zwischen
-beliebigen Anbietern – als ein einziger Docker-Container mit **Web-UI**,
-Aktivitäts-Feed, Logs und Alerts. Eine quelloffene Alternative zu Diensten wie
-SyncGene, unabhängig von externen Anbietern.
+Self-hosted, bidirectional sync for **calendars and contacts** between arbitrary
+providers — a single Docker container with a **web UI**, an activity feed, logs
+and alerts. An open-source alternative to services like SyncGene, with no
+dependency on an external provider.
 
-Unter der Haube läuft [vdirsyncer](https://github.com/pimutils/vdirsyncer); ein
-FastAPI-Dienst plant die Läufe, generiert die vdirsyncer-Konfiguration, parst
-deren Ausgabe in eine SQLite-DB und zeigt alles im Browser.
+Under the hood it runs [vdirsyncer](https://github.com/pimutils/vdirsyncer); a
+FastAPI service schedules the runs, generates the vdirsyncer configuration,
+parses its output into a SQLite DB and shows everything in the browser.
 
 ## Features
 
-- **Bidirektional**, beliebig viele Kalender/Adressbücher, im UI mappbar
-- Unterstützte Anbieter:
-  - **iCloud** (CalDAV/CardDAV, App-spezifisches Passwort → voller Schreibzugriff)
-  - **Google** (offizielle Calendar API + People API, OAuth2)
-  - **Microsoft / Outlook** sowie **jeder CalDAV/CardDAV-Server** (Nextcloud, Fastmail, mailbox.org, eigener Server …)
-- **Web-UI** (Port 8080): Dashboard, Aktivität (was/wann/wo/Quelle→Ziel), Läufe, Live-Logs
-- **Komplett im UI konfigurierbar**: Accounts, Paare, Discover, Mappings, Intervall
-- **Login** mit „angemeldet bleiben" und geführter Ersteinrichtung
-- **Alerts** via [Apprise](https://github.com/caronc/apprise) (E-Mail, ntfy, Telegram, Discord …)
-- **Healthcheck**, Logs in `docker logs` und Datei, Bind-Mounts, non-root Container
+- **Bidirectional**, any number of calendars/address books, mappable in the UI
+- Supported providers:
+  - **iCloud** (CalDAV/CardDAV, app-specific password → full write access)
+  - **Google** (official Calendar API + People API, OAuth2)
+  - **Microsoft / Outlook** and **any CalDAV/CardDAV server** (Nextcloud, Fastmail, mailbox.org, your own server …)
+- **Web UI** (port 8080): dashboard, activity (what/when/where/source→target), runs, live logs
+- **Fully configurable in the UI**: accounts, pairs, discovery, mappings, interval
+- **Login** with "stay signed in" and a guided first-time setup
+- **Alerts** via [Apprise](https://github.com/caronc/apprise) (email, ntfy, Telegram, Discord …)
+- **Healthcheck**, logs in `docker logs` and a file, bind mounts, non-root container
 
-## Schnellstart
+## Quick start
 
 ```sh
 git clone https://github.com/cutzenfriend/cardAndCalSyncer.git
 cd cardAndCalSyncer
-cp .env.example .env            # optional; alles geht auch im UI
+cp .env.example .env            # optional; everything also works in the UI
 
 sudo mkdir -p /opt/docker-volumes/cacs/{config,data,logs}
 sudo chown -R 1000:1000 /opt/docker-volumes/cacs
@@ -35,11 +35,11 @@ sudo chown -R 1000:1000 /opt/docker-volumes/cacs
 docker compose up -d --build
 ```
 
-Dann **http://<host>:8080** öffnen → bei der Ersteinrichtung ein Admin-Konto
-anlegen → Accounts hinzufügen → Paare anlegen → „Collections laden" → mappen →
-„Paar speichern". Fertig.
+Then open **http://<host>:8080** → create an admin account during first-time
+setup → add accounts → create pairs → "Load collections" → map them →
+"Save pair". Done.
 
-### Beispiel `docker-compose.yml`
+### Example `docker-compose.yml`
 
 ```yaml
 services:
@@ -51,8 +51,8 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SYNC_INTERVAL: "300"        # Sekunden, im UI änderbar
-      # ADMIN_USERNAME / ADMIN_PASSWORD optional für headless-Bootstrap
+      SYNC_INTERVAL: "300"        # seconds, changeable in the UI
+      # ADMIN_USERNAME / ADMIN_PASSWORD optional for a headless bootstrap
     volumes:
       - /opt/docker-volumes/cacs/config:/config
       - /opt/docker-volumes/cacs/data:/data
@@ -64,64 +64,64 @@ services:
       retries: 3
 ```
 
-## Anbieter einrichten
+## Setting up providers
 
-| Anbieter | Was du brauchst |
+| Provider | What you need |
 |---|---|
-| **iCloud** | Apple-ID + **App-spezifisches Passwort** (appleid.apple.com → Anmeldung & Sicherheit; 2FA nötig) |
-| **Google** | OAuth-Client **Typ „Desktop"** aus der Google Cloud Console; APIs „Calendar" + „People" aktivieren. OAuth einmalig autorisieren (siehe unten) |
-| **Microsoft/Outlook** | Nur falls der Account CalDAV/CardDAV erlaubt – Server-URL + Zugangsdaten. **Microsoft 365 / Graph wird nicht unterstützt** (vdirsyncer spricht kein Graph) |
-| **CalDAV/CardDAV** (Nextcloud, Fastmail, eigener Server) | Server-URL(s) + Benutzer/Passwort (ggf. App-Passwort) |
+| **iCloud** | Apple ID + **app-specific password** (appleid.apple.com → Sign-In & Security; 2FA required) |
+| **Google** | OAuth client of type **"Desktop"** from the Google Cloud Console; enable the "Calendar" and "People" APIs. Authorize OAuth once (see below) |
+| **Microsoft/Outlook** | Only if the account allows CalDAV/CardDAV — server URL + credentials. **Microsoft 365 / Graph is not supported** (vdirsyncer doesn't speak Graph) |
+| **CalDAV/CardDAV** (Nextcloud, Fastmail, your own server) | Server URL(s) + username/password (app password if applicable) |
 
-> **Google-OAuth (einmalig):** Der Flow erwartet einen `localhost`-Redirect, was
-> headless im Container umständlich ist. Einfachster Weg: vdirsyncer einmal auf
-> einem Desktop mit Browser autorisieren (`pipx install "vdirsyncer[google]"`,
-> gleiche Client-ID), das erzeugte Token nach `/opt/docker-volumes/cacs/data/`
-> kopieren (als `acc_<id>_cal.token` / `acc_<id>_card.token`, Eigentümer uid 1000).
+> **Google OAuth (one-time):** the flow expects a `localhost` redirect, which is
+> awkward headless inside a container. Easiest path: authorize vdirsyncer once on
+> a desktop with a browser (`pipx install "vdirsyncer[google]"`, same client ID),
+> then copy the generated token into `/opt/docker-volumes/cacs/data/`
+> (as `acc_<id>_cal.token` / `acc_<id>_card.token`, owner uid 1000).
 
-## Oberfläche
+## Interface
 
-| Seite | Inhalt |
+| Page | Content |
 |---|---|
-| **Dashboard** | Status, nächster Lauf, Summen, letzte Läufe & Aktivität, manueller Sync, Pausieren |
-| **Aktivität** | jedes Objekt: Zeit · Aktion (erstellt/geändert/gelöscht) · Paar · Kalender · **Quelle → Ziel** · UID |
-| **Läufe** | jeder Sync/Discover mit Counts, Status, rc und vollem Log |
-| **Logs** | Live-Tail der `vdirsyncer.log` |
-| **Konfiguration** | Accounts, Sync-Paare, Discover/Mappings, Intervall, Alerts, Login |
+| **Dashboard** | status, next run, totals, recent runs & activity, manual sync, pause |
+| **Activity** | each object: time · action (created/updated/deleted) · pair · collection · **source → target** · UID |
+| **Runs** | every sync/discover with counts, status, rc and the full log |
+| **Logs** | live tail of `vdirsyncer.log` |
+| **Configuration** | accounts, sync pairs, discovery/mappings, interval, alerts, login |
 
-## Hinweise & Grenzen
+## Notes & limitations
 
-- **Kein echtes Realtime** – iCloud-CalDAV bietet kein Push. CaCs pollt im
-  Intervall (Standard 300 s, ab 30 s) und überträgt per Sync-Token nur Deltas.
-- **Erst-Sync/Duplikate:** vdirsyncer matcht per UID. Existieren dieselben
-  Termine schon auf beiden Seiten, erst mit **einem** Kalender testen.
-- **Objekt-Titel:** Der Feed zeigt die UID (mehr loggt vdirsyncer nicht), dazu
-  Richtung, Kalender und Zeitpunkt.
-- **Beide Seiten müssen existieren** – CaCs legt keine neuen Kalender an, es mappt vorhandene.
-- **Secrets** liegen ausschließlich in `/data/cacs.json` (0600) und gehen per
-  Umgebungsvariable an den Subprozess – **nie** in die generierte `vdirsyncer.conf`.
+- **No true real-time** — iCloud CalDAV offers no push. CaCs polls on an
+  interval (default 300 s, down to 30 s) and transfers only deltas via sync token.
+- **Initial sync / duplicates:** vdirsyncer matches by UID. If the same events
+  already exist on both sides, test with **one** calendar first.
+- **Object titles:** the feed shows the UID (that's all vdirsyncer logs), plus
+  direction, collection and timestamp.
+- **Both sides must exist** — CaCs does not create new calendars, it maps existing ones.
+- **Secrets** live only in `/data/cacs.json` (0600) and are passed to the
+  subprocess via environment variables — **never** in the generated `vdirsyncer.conf`.
 
-## Umgebungsvariablen
+## Environment variables
 
-| Variable | Zweck |
+| Variable | Purpose |
 |---|---|
-| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | optionales Admin-Bootstrap (sonst `/setup`) |
-| `APPRISE_URLS` | komma-getrennte Alert-Ziele |
-| `SYNC_INTERVAL` | Start-Intervall in Sekunden (im UI änderbar) |
-| `LOG_LEVEL` | `INFO` (Standard) / `DEBUG` |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | optional admin bootstrap (otherwise `/setup`) |
+| `APPRISE_URLS` | comma-separated alert targets |
+| `SYNC_INTERVAL` | start interval in seconds (changeable in the UI) |
+| `LOG_LEVEL` | `INFO` (default) / `DEBUG` |
 
-## Architektur
+## Architecture
 
 ```
-┌────────────────────────── cacs (1 Container) ───────────────────────────┐
-│  FastAPI ──Scheduler──▶ vdirsyncer (Subprozess) ──CalDAV/CardDAV/API──▶  │
+┌────────────────────────── cacs (1 container) ───────────────────────────┐
+│  FastAPI ──scheduler──▶ vdirsyncer (subprocess) ──CalDAV/CardDAV/API──▶  │
 │   │  │                       │ stdout/stderr        iCloud · Google ·     │
-│   │  └─ Web-UI :8080         ▼                       Microsoft · DAV …    │
-│   └─ SQLite (Läufe/Aktivität) ◀─ Log-Parser ─ generierte vdirsyncer.conf  │
+│   │  └─ web UI :8080         ▼                       Microsoft · DAV …    │
+│   └─ SQLite (runs/activity) ◀─ log parser ─ generated vdirsyncer.conf     │
 └───────────────────────────────────────────────────────────────────────────┘
-   /config  generierte conf     /data  DB · Config · OAuth-Token · Status     /logs
+   /config  generated conf      /data  DB · config · OAuth tokens · status     /logs
 ```
 
-## Lizenz
+## License
 
 MIT

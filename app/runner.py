@@ -1,4 +1,4 @@
-"""Fuehrt vdirsyncer (sync/discover) aus, parst die Ausgabe, persistiert."""
+"""Runs vdirsyncer (sync/discover), parses the output, and persists results."""
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +13,7 @@ import parser
 from db import Database
 from store import ConfigStore
 
-log = logging.getLogger("calsync.runner")
+log = logging.getLogger("cacs.runner")
 
 CONFIG_FILE = "/config/vdirsyncer.conf"
 DISCOVER_CONF = "/config/.discover.conf"
@@ -31,7 +31,7 @@ class Runner:
         self._lock = asyncio.Lock()
         self.busy = False
 
-    # --- Subprozess --------------------------------------------------------
+    # --- subprocess --------------------------------------------------------
     async def _exec(self, cmd: list[str], secret_env: dict[str, str],
                     run_id: int) -> tuple[int, list[str]]:
         env = dict(os.environ)
@@ -61,7 +61,7 @@ class Runner:
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
 
-    # --- Sync --------------------------------------------------------------
+    # --- sync --------------------------------------------------------------
     async def run_sync(self, pair: str | None = None,
                        trigger: str = "scheduled") -> dict[str, Any]:
         async with self._lock:
@@ -77,15 +77,15 @@ class Runner:
         prev_status = prev["status"] if prev else None
 
         run_id = self.db.start_run("sync", pair, trigger, _now())
-        log.info("sync run #%s gestartet (pair=%s, trigger=%s)", run_id, pair, trigger)
+        log.info("sync run #%s started (pair=%s, trigger=%s)", run_id, pair, trigger)
         try:
             return await self._do_sync(run_id, cfg, prev_status, pair)
         except Exception as exc:
-            log.exception("sync run #%s abgebrochen", run_id)
+            log.exception("sync run #%s aborted", run_id)
             self.db.finish_run(
                 run_id, status="failed", finished_at=_now(), rc=-1,
                 n_create=0, n_update=0, n_delete=0, n_errors=1,
-                log=f"calSync interner Fehler: {exc}")
+                log=f"CaCs internal error: {exc}")
             self._maybe_alert(cfg, "failed", prev_status, run_id,
                               parser.ParsedRun(errors=[str(exc)]), -1)
             return {"run_id": run_id, "status": "failed", "rc": -1,
@@ -129,7 +129,7 @@ class Runner:
         self.db.prune_runs()
 
         self._maybe_alert(cfg, status, prev_status, run_id, parsed, rc)
-        log.info("sync run #%s fertig: %s (rc=%s, +%s ~%s -%s, %s Fehler)",
+        log.info("sync run #%s done: %s (rc=%s, +%s ~%s -%s, %s errors)",
                  run_id, status, rc, counts["create"], counts["update"],
                  counts["delete"], n_errors)
         return {
@@ -144,14 +144,14 @@ class Runner:
         if not urls:
             return
         if status == "failed" and al.get("on_failure", True):
-            body = (f"calSync Lauf #{run_id} fehlgeschlagen (rc={rc}).\n\n"
-                    + "\n".join(parsed.errors[:10]) or "Siehe Logs.")
-            alerts.notify(urls, "❌ calSync: Sync fehlgeschlagen", body, kind="failure")
+            body = (f"CaCs run #{run_id} failed (rc={rc}).\n\n"
+                    + "\n".join(parsed.errors[:10]) or "See logs.")
+            alerts.notify(urls, "❌ CaCs: sync failed", body, kind="failure")
         elif status == "success" and prev_status == "failed" and al.get("on_recovery", True):
-            alerts.notify(urls, "✅ calSync: Sync wieder ok",
-                          f"Lauf #{run_id} war erfolgreich.", kind="success")
+            alerts.notify(urls, "✅ CaCs: sync recovered",
+                          f"Run #{run_id} succeeded.", kind="success")
 
-    # --- Discover ----------------------------------------------------------
+    # --- discover ----------------------------------------------------------
     async def discover(self, pair: str, list_all: bool = True) -> dict[str, Any]:
         async with self._lock:
             self.busy = True
@@ -166,11 +166,11 @@ class Runner:
         try:
             return await self._do_discover(run_id, cfg, pair, list_all)
         except Exception as exc:
-            log.exception("discover #%s abgebrochen", run_id)
+            log.exception("discover #%s aborted", run_id)
             self.db.finish_run(
                 run_id, status="failed", finished_at=_now(), rc=-1,
                 n_create=0, n_update=0, n_delete=0, n_errors=1,
-                log=f"calSync interner Fehler: {exc}")
+                log=f"CaCs internal error: {exc}")
             return {"run_id": run_id, "status": "failed", "rc": -1,
                     "storages": {}, "error": str(exc)}
 
@@ -191,8 +191,8 @@ class Runner:
         known = {sa, sb}
         discovered = parser.parse_discover_output(lines, known)
 
-        # list-all liefert die Daten schon vor evtl. Abbruch -> erfolgreich,
-        # sobald mind. eine Seite gefunden wurde.
+        # list-all prints the data before any possible abort -> consider it a
+        # success as soon as at least one side was found.
         ok = bool(discovered) if list_all else (rc == 0)
         status = "success" if ok else "failed"
         self.db.finish_run(

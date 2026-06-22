@@ -1,22 +1,22 @@
 {% extends "base.html" %}
-{% block title %}{{ app_name }} · Konfiguration{% endblock %}
+{% block title %}{{ app_name }} · Configuration{% endblock %}
 {% block nav_cfg %}active{% endblock %}
 {% block content %}
-<h1>Konfiguration</h1>
+<h1>Configuration</h1>
 
 <section class="panel">
-  <h2>Allgemein</h2>
+  <h2>General</h2>
   <div class="grid2">
-    <label>Sync-Intervall (Sekunden)<input type="number" id="interval" min="30" step="10"></label>
-    <label class="chk"><input type="checkbox" id="enabled"> Geplanten Sync aktiviert</label>
+    <label>Sync interval (seconds)<input type="number" id="interval" min="30" step="10"></label>
+    <label class="chk"><input type="checkbox" id="enabled"> Scheduled sync enabled</label>
   </div>
-  <h3>Benachrichtigungen (Apprise)</h3>
-  <p class="hint">Eine URL pro Zeile (<code>mailto://…</code>, <code>tgram://…</code>, <code>ntfy://…</code>)</p>
+  <h3>Notifications (Apprise)</h3>
+  <p class="hint">One URL per line (<code>mailto://…</code>, <code>tgram://…</code>, <code>ntfy://…</code>)</p>
   <textarea id="apprise" rows="2"></textarea>
   <div class="row gap">
-    <label class="chk"><input type="checkbox" id="al_fail"> bei Fehler</label>
-    <label class="chk"><input type="checkbox" id="al_rec"> bei Erholung</label>
-    <button class="btn" onclick="saveGeneral()">Allgemein speichern</button>
+    <label class="chk"><input type="checkbox" id="al_fail"> on failure</label>
+    <label class="chk"><input type="checkbox" id="al_rec"> on recovery</label>
+    <button class="btn" onclick="saveGeneral()">Save general</button>
     <span id="genmsg" class="muted"></span>
   </div>
 </section>
@@ -25,7 +25,7 @@
   <div class="row between"><h2>Accounts</h2></div>
   <div id="accounts"></div>
   <div class="row gap wrap" style="margin-top:10px">
-    <span class="muted">Neuer Account:</span>
+    <span class="muted">New account:</span>
     <button class="btn" onclick="addAccount('icloud')">+ iCloud</button>
     <button class="btn" onclick="addAccount('google')">+ Google</button>
     <button class="btn" onclick="addAccount('microsoft')">+ Microsoft/Outlook</button>
@@ -36,7 +36,7 @@
 </section>
 
 <section class="panel">
-  <div class="row between"><h2>Sync-Paare</h2><button class="btn" onclick="addPair()">+ Paar</button></div>
+  <div class="row between"><h2>Sync pairs</h2><button class="btn" onclick="addPair()">+ Pair</button></div>
   <div id="pairs"></div>
 </section>
 {% endblock %}
@@ -48,23 +48,23 @@ const discovered = {};
 
 const PRESETS = {
   icloud:    {kind:'icloud', label:'iCloud', fields:['username','password'],
-              help:'App-spezifisches Passwort von appleid.apple.com (nicht das normale Passwort).'},
+              help:'App-specific password from appleid.apple.com (not your normal password).'},
   google:    {kind:'google', label:'Google', fields:['client_id','client_secret'],
-              help:'OAuth-Client „Desktop" (Calendar API + People API). OAuth einmalig autorisieren – siehe README.'},
+              help:'OAuth "Desktop" client (Calendar API + People API). Authorize OAuth once — see README.'},
   microsoft: {kind:'caldav', label:'Microsoft/Outlook', fields:['username','password','cal_url','card_url'],
               cal_url:'https://outlook.office365.com/', card_url:'',
-              help:'⚠️ Funktioniert nur, wenn der Account CalDAV/CardDAV erlaubt. Microsoft 365/Graph wird von vdirsyncer NICHT unterstützt.'},
+              help:'⚠️ Works only if the account allows CalDAV/CardDAV. Microsoft 365/Graph is NOT supported by vdirsyncer.'},
   nextcloud: {kind:'caldav', label:'Nextcloud', fields:['username','password','cal_url','card_url'],
               cal_url:'https://cloud.example.com/remote.php/dav/', card_url:'https://cloud.example.com/remote.php/dav/',
-              help:'URL deiner Nextcloud-DAV-Endpunkte.'},
+              help:'URL of your Nextcloud DAV endpoints.'},
   fastmail:  {kind:'caldav', label:'Fastmail', fields:['username','password','cal_url','card_url'],
               cal_url:'https://caldav.fastmail.com/', card_url:'https://carddav.fastmail.com/',
-              help:'App-Passwort von Fastmail verwenden.'},
-  caldav:    {kind:'caldav', label:'CalDAV/CardDAV (generisch)', fields:['username','password','cal_url','card_url'],
-              help:'Beliebiger Server. Kalender-URL und/oder Kontakte-URL eintragen.'},
+              help:'Use a Fastmail app password.'},
+  caldav:    {kind:'caldav', label:'CalDAV/CardDAV (generic)', fields:['username','password','cal_url','card_url'],
+              help:'Any server. Enter the calendar URL and/or the contacts URL.'},
 };
-const FIELD_LABEL = {username:'Benutzer / E-Mail', password:'Passwort', cal_url:'Kalender-URL (CalDAV)',
-  card_url:'Kontakte-URL (CardDAV)', client_id:'Client ID', client_secret:'Client Secret'};
+const FIELD_LABEL = {username:'Username / email', password:'Password', cal_url:'Calendar URL (CalDAV)',
+  card_url:'Contacts URL (CardDAV)', client_id:'Client ID', client_secret:'Client secret'};
 
 function $(id){return document.getElementById(id);}
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -84,7 +84,7 @@ async function saveGeneral(){
               on_failure:$('al_fail').checked, on_recovery:$('al_rec').checked};
   try{ await api('/api/config',{method:'POST',body:JSON.stringify(
         {interval_seconds:CFG.interval_seconds,sync_enabled:CFG.sync_enabled,alerts:CFG.alerts})});
-       $('genmsg').textContent='gespeichert ✓'; }catch(e){ $('genmsg').textContent=e.message; }
+       $('genmsg').textContent='saved ✓'; }catch(e){ $('genmsg').textContent=e.message; }
 }
 
 // --- ACCOUNTS ---
@@ -93,14 +93,14 @@ function presetForKind(kind){ return kind==='icloud'?PRESETS.icloud : kind==='go
 function renderAccounts(){
   const root=$('accounts'); root.innerHTML='';
   const ids=Object.keys(CFG.accounts);
-  if(!ids.length){ root.innerHTML='<p class="muted">Noch keine Accounts.</p>'; return; }
+  if(!ids.length){ root.innerHTML='<p class="muted">No accounts yet.</p>'; return; }
   for(const id of ids){
     const a=CFG.accounts[id];
     const div=document.createElement('div'); div.className='item';
     div.innerHTML=`<div class="row between"><div><b>${esc(a.name||id)}</b>
       <span class="side ${a.kind}">${a.kind}</span></div>
-      <div class="row gap"><button class="btn small" onclick="editAccount('${id}')">Bearbeiten</button>
-      <button class="btn small danger" onclick="delAccount('${id}')">Löschen</button></div></div>`;
+      <div class="row gap"><button class="btn small" onclick="editAccount('${id}')">Edit</button>
+      <button class="btn small danger" onclick="delAccount('${id}')">Delete</button></div></div>`;
     root.appendChild(div);
   }
 }
@@ -115,19 +115,19 @@ function accountForm(id, presetKey){
   const fields = preset.fields.map(f=>{
     const isSec = ['password','client_secret','client_id'].includes(f);
     const cur = a[f]||'';
-    const ph = (cur==='__SET__') ? '•••••• (gesetzt)' : (preset[f]||'');
+    const ph = (cur==='__SET__') ? '•••••• (set)' : (preset[f]||'');
     const val = (cur==='__SET__') ? '' : esc(cur);
     return `<label>${FIELD_LABEL[f]||f}
       <input data-f="${f}" type="${isSec?'password':'text'}" value="${val}" placeholder="${esc(ph)}"></label>`;
   }).join('');
   const dlg=document.createElement('div'); dlg.className='overlay';
-  dlg.innerHTML=`<div class="dialog"><h2>${id?'Account bearbeiten':preset.label+' hinzufügen'}</h2>
+  dlg.innerHTML=`<div class="dialog"><h2>${id?'Edit account':'Add '+preset.label}</h2>
     <p class="hint">${esc(preset.help||'')}</p>
-    <label>Anzeigename<input id="acc-name" value="${esc(a.name||preset.label)}"></label>
+    <label>Display name<input id="acc-name" value="${esc(a.name||preset.label)}"></label>
     <div class="grid2">${fields}</div>
     <div class="row gap" style="margin-top:12px">
-      <button class="btn primary" id="acc-save">Speichern</button>
-      <button class="btn" id="acc-cancel">Abbrechen</button>
+      <button class="btn primary" id="acc-save">Save</button>
+      <button class="btn" id="acc-cancel">Cancel</button>
       <span class="err" id="acc-msg"></span></div></div>`;
   document.body.appendChild(dlg);
   dlg.querySelector('#acc-cancel').onclick=()=>dlg.remove();
@@ -141,13 +141,13 @@ function accountForm(id, presetKey){
       else { payload[f]=''; }
     });
     try{ const r=await api('/api/accounts',{method:'POST',body:JSON.stringify(payload)});
-         CFG=r.config; dlg.remove(); renderAccounts(); renderPairs(); toast('Account gespeichert');
+         CFG=r.config; dlg.remove(); renderAccounts(); renderPairs(); toast('Account saved');
     }catch(e){ dlg.querySelector('#acc-msg').textContent=e.message; }
   };
 }
 
 async function delAccount(id){
-  if(!confirm('Account wirklich löschen?'))return;
+  if(!confirm('Really delete this account?'))return;
   try{ const r=await api('/api/accounts/'+id,{method:'DELETE'}); CFG=r.config; renderAccounts(); renderPairs(); }
   catch(e){ toast(e.message,true); }
 }
@@ -158,38 +158,38 @@ function accountOptions(sel){ return Object.entries(CFG.accounts)
 
 function addPair(){
   const ids=Object.keys(CFG.accounts);
-  if(ids.length<2){ toast('Erst mindestens zwei Accounts anlegen',true); return; }
+  if(ids.length<2){ toast('Add at least two accounts first',true); return; }
   const pid='new_'+Math.random().toString(36).slice(2,8);
-  CFG.pairs[pid]={name:'Neues Paar',service:'calendar',a:ids[0],b:ids[1],conflict_resolution:'a wins',collections:[],_new:true};
+  CFG.pairs[pid]={name:'New pair',service:'calendar',a:ids[0],b:ids[1],conflict_resolution:'a wins',collections:[],_new:true};
   renderPairs();
 }
 
 function renderPairs(){
   const root=$('pairs'); root.innerHTML='';
   const ids=Object.keys(CFG.pairs);
-  if(!ids.length){ root.innerHTML='<p class="muted">Noch keine Paare.</p>'; }
+  if(!ids.length){ root.innerHTML='<p class="muted">No pairs yet.</p>'; }
   for(const pid of ids){
     const p=CFG.pairs[pid];
     const sec=document.createElement('div'); sec.className='item';
     sec.innerHTML=`
       <div class="grid2">
         <label>Name<input data-p="name" value="${esc(p.name||'')}"></label>
-        <label>Typ<select data-p="service">
-          <option value="calendar" ${p.service==='calendar'?'selected':''}>Kalender</option>
-          <option value="contacts" ${p.service==='contacts'?'selected':''}>Kontakte</option></select></label>
-        <label>Seite A<select data-p="a">${accountOptions(p.a)}</select></label>
-        <label>Seite B<select data-p="b">${accountOptions(p.b)}</select></label>
-        <label>Konfliktlösung<select data-p="conflict_resolution">
-          <option value="a wins" ${p.conflict_resolution==='a wins'?'selected':''}>A gewinnt</option>
-          <option value="b wins" ${p.conflict_resolution==='b wins'?'selected':''}>B gewinnt</option></select></label>
+        <label>Type<select data-p="service">
+          <option value="calendar" ${p.service==='calendar'?'selected':''}>Calendar</option>
+          <option value="contacts" ${p.service==='contacts'?'selected':''}>Contacts</option></select></label>
+        <label>Side A<select data-p="a">${accountOptions(p.a)}</select></label>
+        <label>Side B<select data-p="b">${accountOptions(p.b)}</select></label>
+        <label>Conflict resolution<select data-p="conflict_resolution">
+          <option value="a wins" ${p.conflict_resolution==='a wins'?'selected':''}>A wins</option>
+          <option value="b wins" ${p.conflict_resolution==='b wins'?'selected':''}>B wins</option></select></label>
       </div>
       <h3>Mappings</h3>
-      <table class="tbl"><thead><tr><th>Kurzname</th><th>A</th><th>B</th><th></th></tr></thead>
+      <table class="tbl"><thead><tr><th>Short name</th><th>A</th><th>B</th><th></th></tr></thead>
         <tbody id="map-${pid}"></tbody></table>
       <div class="row gap wrap">
-        <button class="btn" onclick="savePair('${pid}')">Paar speichern</button>
-        <button class="btn" onclick="doDiscover('${pid}')">Collections laden</button>
-        <button class="btn small danger" onclick="delPair('${pid}')">Paar löschen</button>
+        <button class="btn" onclick="savePair('${pid}')">Save pair</button>
+        <button class="btn" onclick="doDiscover('${pid}')">Load collections</button>
+        <button class="btn small danger" onclick="delPair('${pid}')">Delete pair</button>
         <span class="muted" id="disc-${pid}"></span>
       </div>
       <div id="builder-${pid}" class="builder hidden"></div>`;
@@ -204,7 +204,7 @@ function renderMap(pid){
   colls.forEach((c,i)=>{ const tr=document.createElement('tr');
     tr.innerHTML=`<td>${esc(c[0])}</td><td class="uid">${esc(c[1])}</td><td class="uid">${esc(c[2])}</td>
       <td><button class="btn small danger" onclick="delMap('${pid}',${i})">×</button></td>`; tb.appendChild(tr); });
-  if(!colls.length) tb.innerHTML='<tr><td colspan="4" class="muted">Noch keine Mappings.</td></tr>';
+  if(!colls.length) tb.innerHTML='<tr><td colspan="4" class="muted">No mappings yet.</td></tr>';
 }
 function delMap(pid,i){ CFG.pairs[pid].collections.splice(i,1); renderMap(pid); }
 
@@ -213,25 +213,25 @@ async function savePair(pid){
   const payload={name:p.name,service:p.service,a:p.a,b:p.b,conflict_resolution:p.conflict_resolution,collections:p.collections};
   if(!p._new) payload.id=pid;
   try{ const r=await api('/api/pairs',{method:'POST',body:JSON.stringify(payload)});
-       CFG=r.config; renderPairs(); toast('Paar gespeichert ✓');
+       CFG=r.config; renderPairs(); toast('Pair saved ✓');
   }catch(e){ toast(e.message,true); }
 }
 
 async function delPair(pid){
   if(CFG.pairs[pid]._new){ delete CFG.pairs[pid]; renderPairs(); return; }
-  if(!confirm('Paar löschen?'))return;
+  if(!confirm('Delete this pair?'))return;
   try{ const r=await api('/api/pairs/'+pid,{method:'DELETE'}); CFG=r.config; renderPairs(); }
   catch(e){ toast(e.message,true); }
 }
 
 async function doDiscover(pid){
-  if(CFG.pairs[pid]._new){ toast('Bitte zuerst „Paar speichern"',true); return; }
-  const note=$('disc-'+pid); note.textContent='lädt… (10–30s)';
+  if(CFG.pairs[pid]._new){ toast('Please "Save pair" first',true); return; }
+  const note=$('disc-'+pid); note.textContent='loading… (10–30s)';
   try{
     const res=await api('/api/discover',{method:'POST',body:JSON.stringify({pair:pid})});
-    discovered[pid]=res; note.textContent=`A: ${res.a.collections.length} · B: ${res.b.collections.length} gefunden`;
+    discovered[pid]=res; note.textContent=`A: ${res.a.collections.length} · B: ${res.b.collections.length} found`;
     renderBuilder(pid,res);
-  }catch(e){ note.textContent='Fehler: '+e.message; }
+  }catch(e){ note.textContent='Error: '+e.message; }
 }
 
 function opt(list){ return list.map(c=>`<option value="${esc(c.id)}">${esc(c.name||c.id)}</option>`).join(''); }
@@ -240,7 +240,7 @@ function renderBuilder(pid,res){
   box.innerHTML=`<div class="row gap wrap">
     <label>${esc(res.a.name)} (A)<select id="sa-${pid}">${opt(res.a.collections)}</select></label>
     <label>${esc(res.b.name)} (B)<select id="sb-${pid}">${opt(res.b.collections)}</select></label>
-    <label>Kurzname<input id="sn-${pid}" placeholder="z.B. arbeit"></label>
+    <label>Short name<input id="sn-${pid}" placeholder="e.g. work"></label>
     <button class="btn" onclick="addMap('${pid}')">+ Mapping</button></div>`;
   const sa=$('sa-'+pid);
   sa.onchange=()=>{ const c=res.a.collections.find(x=>x.id===sa.value);
@@ -250,7 +250,7 @@ function renderBuilder(pid,res){
 function addMap(pid){
   const aid=$('sa-'+pid).value, bid=$('sb-'+pid).value;
   const sn=($('sn-'+pid).value||'').trim()||('map'+(CFG.pairs[pid].collections.length+1));
-  if(!aid||!bid){ toast('Beide Seiten wählen',true); return; }
+  if(!aid||!bid){ toast('Select both sides',true); return; }
   CFG.pairs[pid].collections.push([sn,aid,bid]); $('sn-'+pid).value=''; renderMap(pid);
 }
 

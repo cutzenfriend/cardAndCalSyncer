@@ -1,21 +1,21 @@
 {% extends "base.html" %}
-{% block title %}calSync · Lauf #{{ run.id }}{% endblock %}
+{% block title %}{{ app_name }} · Run #{{ run.id }}{% endblock %}
 {% block nav_runs %}active{% endblock %}
 {% block content %}
-<a class="back" href="/runs">← Läufe</a>
-<h1>Lauf #{{ run.id }} <span class="pill {{ run.status }}">{{ run.status }}</span></h1>
+<a class="back" href="/runs">← Runs</a>
+<h1>Run #{{ run.id }} <span class="pill {{ run.status }}">{{ run.status }}</span></h1>
 <div class="meta">
-  <span>Art: <b>{{ run.kind }}</b></span>
-  <span>Paar: <b>{{ run.pair or 'alle' }}</b></span>
+  <span>Kind: <b>{{ run.kind }}</b></span>
+  <span>Pair: <b>{{ run.pair or 'all' }}</b></span>
   <span>Trigger: <b>{{ run.trigger }}</b></span>
-  <span>Start: <b>{{ run.started_at }}</b></span>
-  <span>Ende: <b>{{ run.finished_at or '–' }}</b></span>
+  <span>Started: <b>{{ run.started_at }}</b></span>
+  <span>Finished: <b>{{ run.finished_at or '–' }}</b></span>
   <span>rc: <b>{{ run.rc }}</b></span>
-  <span>+{{ run.n_create }} ~{{ run.n_update }} −{{ run.n_delete }} · {{ run.n_errors }} Fehler</span>
+  <span>+{{ run.n_create }} ~{{ run.n_update }} −{{ run.n_delete }} · {{ run.n_errors }} errors</span>
 </div>
 
 {% if activities %}
-<h2>Aktivitäten</h2>
+<h2>Activities</h2>
 {% include "_activity_table.html" %}
 {% endif %}
 

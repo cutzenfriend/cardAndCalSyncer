@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}calSync · Logs{% endblock %}
+{% block title %}{{ app_name }} · Logs{% endblock %}
 {% block nav_logs %}active{% endblock %}
 {% block content %}
 <div class="row gap between">
   <h1>Logs</h1>
-  <label class="row gap"><input type="checkbox" id="auto" checked> Auto-Refresh (4s)</label>
+  <label class="row gap"><input type="checkbox" id="auto" checked> Auto-refresh (4s)</label>
 </div>
-<pre class="logbox" id="log">lädt…</pre>
+<pre class="logbox" id="log">loading…</pre>
 {% endblock %}
 {% block scripts %}
 <script>
