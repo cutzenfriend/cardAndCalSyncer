@@ -11,6 +11,7 @@ from typing import Any
 
 import alerts
 import confgen
+import enrich
 import parser
 from db import Database
 from store import ConfigStore
@@ -170,9 +171,10 @@ class Runner:
         rc, lines = await self._exec(cmd, secret_env, run_id)
         parsed = parser.parse_sync_output(lines)
 
+        enrich_items: list[dict[str, Any]] = []
         for act in parsed.activities:
             info = self.store.resolve_dest(act.dest_storage, act.collection) or {}
-            self.db.add_activity(run_id, _now(), {
+            act_id = self.db.add_activity(run_id, _now(), {
                 "action": act.action,
                 "ident": act.ident,
                 "pair": info.get("pair"),
@@ -183,6 +185,10 @@ class Runner:
                 "dst_name": info.get("dst_name"),
                 "dst_kind": info.get("dst_kind"),
             })
+            # deletes can't be enriched (item is gone); only create/update
+            if act.action != "delete" and info.get("pair_id"):
+                enrich_items.append({"activity_id": act_id, "pair_id": info["pair_id"],
+                                     "collection": act.collection, "uid": act.ident})
 
         counts = parsed.counts
         n_errors = len(parsed.errors)
@@ -196,6 +202,15 @@ class Runner:
         self.db.prune_runs()
 
         self._maybe_alert(cfg, status, prev_status, run_id, parsed, rc)
+
+        # best-effort: fetch human titles/dates for changed items (never fatal)
+        if enrich_items:
+            try:
+                await asyncio.wait_for(
+                    enrich.enrich(self.store, self.db, enrich_items), timeout=90)
+            except Exception:
+                log.debug("enrichment skipped/failed", exc_info=True)
+
         log.info("sync run #%s done: %s (rc=%s, +%s ~%s -%s, %s errors)",
                  run_id, status, rc, counts["create"], counts["update"],
                  counts["delete"], n_errors)

@@ -137,6 +137,7 @@ class ConfigStore:
             label = (p.get("labels", {}) or {}).get(collection) if collection else None
             return {
                 "pair": p.get("name") or pid,
+                "pair_id": pid,
                 "collection_label": label or collection,
                 "dst_name": accs.get(dst, {}).get("name", dst),
                 "dst_kind": accs.get(dst, {}).get("kind", "caldav"),

@@ -127,7 +127,7 @@ the copy-paste.) The token is refreshed automatically afterwards — one-time st
 | Page | Content |
 |---|---|
 | **Dashboard** | status, next run, totals, recent runs & activity, manual sync, pause |
-| **Activity** | each object: time · action (created/updated/deleted) · pair · collection · **source → target** · UID |
+| **Activity** | each object: time · action (created/updated/deleted) · pair · **calendar name** · **source → target** · item (title + date when resolvable, else UID) |
 | **Runs** | every sync/discover with counts, status, rc and the full log |
 | **Logs** | live tail of `vdirsyncer.log` |
 | **Configuration** | accounts, sync pairs, discovery/mappings, interval, alerts, login |
@@ -144,8 +144,10 @@ the copy-paste.) The token is refreshed automatically afterwards — one-time st
   mappings before going live. It confirms connectivity and guarantees zero
   changes, but cannot list the individual would-be changes (vdirsyncer exposes
   no diff preview).
-- **Object titles:** the feed shows the UID (that's all vdirsyncer logs), plus
-  direction, collection and timestamp.
+- **Object titles:** vdirsyncer only logs an item's UID, so CaCs fetches the
+  changed item's content from a server after each sync (best-effort) to show the
+  real title + date. Deletes (the item is gone) and anything it can't fetch fall
+  back to showing the UID.
 - **Both sides must exist** — CaCs does not create new calendars, it maps existing ones.
 - **Secrets** live only in `/data/cacs.json` (0600) and are passed to the
   subprocess via environment variables — **never** in the generated `vdirsyncer.conf`.

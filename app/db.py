@@ -97,7 +97,7 @@ class Database:
                 (status, finished_at, rc, n_create, n_update, n_delete, n_errors, log, run_id),
             )
 
-    def add_activity(self, run_id: int, ts: str, act: dict[str, Any]) -> None:
+    def add_activity(self, run_id: int, ts: str, act: dict[str, Any]) -> int:
         with self._cursor() as cur:
             cur.execute(
                 "INSERT INTO activities (run_id, ts, action, ident, pair, collection, "
@@ -111,6 +111,13 @@ class Database:
                     act.get("dst_name"), act.get("dst_kind"),
                 ),
             )
+            return int(cur.lastrowid)
+
+    def set_activity_detail(self, activity_id: int, title: str | None,
+                            subtitle: str | None) -> None:
+        with self._cursor() as cur:
+            cur.execute("UPDATE activities SET title=?, subtitle=? WHERE id=?",
+                        (title, subtitle, activity_id))
 
     def list_runs(self, limit: int = 50, offset: int = 0, kind: str | None = None) -> list[sqlite3.Row]:
         q = "SELECT * FROM runs"
