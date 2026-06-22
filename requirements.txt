@@ -1,0 +1,5 @@
+vdirsyncer[google]
+fastapi
+uvicorn[standard]
+jinja2
+apprise

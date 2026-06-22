@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}calSync · Dashboard{% endblock %}
+{% block nav_dash %}active{% endblock %}
+{% block content %}
+<div class="row gap">
+  <button class="btn primary" onclick="syncNow()">Jetzt synchronisieren</button>
+  <button class="btn" id="toggleBtn" onclick="toggleSync()">…</button>
+  <a class="btn" href="/config">Konfiguration</a>
+</div>
+
+{% if not status.ready %}
+<div class="note warn">⚠️ Noch nicht startklar – bitte unter <a href="/config">Konfiguration</a>
+Zugangsdaten eintragen und Kalender/Adressbücher mappen.</div>
+{% endif %}
+
+<section class="cards">
+  <div class="card"><div class="k">Status</div>
+    <div class="v">{% if status.sync_enabled %}aktiv{% else %}pausiert{% endif %}</div>
+    <div class="sub">Intervall {{ status.interval_seconds }}s</div></div>
+  <div class="card"><div class="k">Letzter Lauf</div>
+    {% if status.last_run %}
+      <div class="v {{ 'ok' if status.last_run.status=='success' else 'bad' }}">{{ status.last_run.status }}</div>
+      <div class="sub">{{ status.last_run.finished_at or status.last_run.started_at }}</div>
+    {% else %}<div class="v">–</div>{% endif %}</div>
+  <div class="card"><div class="k">Erstellt gesamt</div><div class="v">{{ status.totals['create'] }}</div></div>
+  <div class="card"><div class="k">Aktualisiert</div><div class="v">{{ status.totals['update'] }}</div></div>
+  <div class="card"><div class="k">Gelöscht</div><div class="v">{{ status.totals['delete'] }}</div></div>
+</section>
+
+<h2>Letzte Läufe</h2>
+<table class="tbl">
+  <thead><tr><th>#</th><th>Zeit</th><th>Trigger</th><th>Status</th><th>+ ~ −</th><th>Fehler</th></tr></thead>
+  <tbody>
+  {% for r in runs %}
+    <tr onclick="location='/runs/{{ r.id }}'" class="click">
+      <td>{{ r.id }}</td><td>{{ r.started_at }}</td><td>{{ r.trigger }}</td>
+      <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
+      <td>{{ r.n_create }} / {{ r.n_update }} / {{ r.n_delete }}</td>
+      <td>{{ r.n_errors }}</td>
+    </tr>
+  {% else %}<tr><td colspan="6" class="muted">Noch keine Läufe.</td></tr>{% endfor %}
+  </tbody>
+</table>
+
+<h2>Neueste Aktivität</h2>
+{% include "_activity_table.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function syncNow(){ try{ await api('/api/sync',{method:'POST',body:'{}'}); toast('Sync gestartet'); setTimeout(()=>location.reload(),1500);}catch(e){toast(e.message,true);} }
+  async function refreshToggle(){ const s=await api('/api/status'); const b=document.getElementById('toggleBtn');
+    b.textContent = s.sync_enabled ? 'Pausieren' : 'Fortsetzen'; b.dataset.on=s.sync_enabled?'1':'0'; }
+  async function toggleSync(){ const b=document.getElementById('toggleBtn'); const on=b.dataset.on==='1';
+    await api('/api/toggle',{method:'POST',body:JSON.stringify({enabled:!on})}); refreshToggle(); }
+  function toast(m,bad){ const t=document.createElement('div'); t.className='toast'+(bad?' bad':''); t.textContent=m;
+    document.body.appendChild(t); setTimeout(()=>t.remove(),3000); }
+  refreshToggle();
+</script>
+{% endblock %}

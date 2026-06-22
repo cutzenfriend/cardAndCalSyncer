@@ -1,0 +1,32 @@
+services:
+  cacs:
+    build: .
+    image: cacs:local
+    container_name: cacs
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"          # Web-UI:  http://<host>:8080
+    environment:
+      SYNC_INTERVAL: "300"   # Standard-Intervall (im UI änderbar)
+      LOG_LEVEL: "INFO"
+      # Optionales Admin-Bootstrap (sonst Ersteinrichtung im Browser unter /setup):
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+    volumes:
+      # Bind-Mounts (keine named volumes):
+      - /opt/docker-volumes/cacs/config:/config   # generierte vdirsyncer.conf
+      - /opt/docker-volumes/cacs/data:/data       # DB, UI-Config, OAuth-Token, Sync-Status
+      - /opt/docker-volumes/cacs/logs:/logs       # vdirsyncer.log
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health',timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

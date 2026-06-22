@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} · Konfiguration{% endblock %}
+{% block nav_cfg %}active{% endblock %}
+{% block content %}
+<h1>Konfiguration</h1>
+
+<section class="panel">
+  <h2>Allgemein</h2>
+  <div class="grid2">
+    <label>Sync-Intervall (Sekunden)<input type="number" id="interval" min="30" step="10"></label>
+    <label class="chk"><input type="checkbox" id="enabled"> Geplanten Sync aktiviert</label>
+  </div>
+  <h3>Benachrichtigungen (Apprise)</h3>
+  <p class="hint">Eine URL pro Zeile (<code>mailto://…</code>, <code>tgram://…</code>, <code>ntfy://…</code>)</p>
+  <textarea id="apprise" rows="2"></textarea>
+  <div class="row gap">
+    <label class="chk"><input type="checkbox" id="al_fail"> bei Fehler</label>
+    <label class="chk"><input type="checkbox" id="al_rec"> bei Erholung</label>
+    <button class="btn" onclick="saveGeneral()">Allgemein speichern</button>
+    <span id="genmsg" class="muted"></span>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="row between"><h2>Accounts</h2></div>
+  <div id="accounts"></div>
+  <div class="row gap wrap" style="margin-top:10px">
+    <span class="muted">Neuer Account:</span>
+    <button class="btn" onclick="addAccount('icloud')">+ iCloud</button>
+    <button class="btn" onclick="addAccount('google')">+ Google</button>
+    <button class="btn" onclick="addAccount('microsoft')">+ Microsoft/Outlook</button>
+    <button class="btn" onclick="addAccount('nextcloud')">+ Nextcloud</button>
+    <button class="btn" onclick="addAccount('fastmail')">+ Fastmail</button>
+    <button class="btn" onclick="addAccount('caldav')">+ CalDAV/CardDAV</button>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="row between"><h2>Sync-Paare</h2><button class="btn" onclick="addPair()">+ Paar</button></div>
+  <div id="pairs"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let CFG = {{ config | tojson }};
+const discovered = {};
+
+const PRESETS = {
+  icloud:    {kind:'icloud', label:'iCloud', fields:['username','password'],
+              help:'App-spezifisches Passwort von appleid.apple.com (nicht das normale Passwort).'},
+  google:    {kind:'google', label:'Google', fields:['client_id','client_secret'],
+              help:'OAuth-Client „Desktop" (Calendar API + People API). OAuth einmalig autorisieren – siehe README.'},
+  microsoft: {kind:'caldav', label:'Microsoft/Outlook', fields:['username','password','cal_url','card_url'],
+              cal_url:'https://outlook.office365.com/', card_url:'',
+              help:'⚠️ Funktioniert nur, wenn der Account CalDAV/CardDAV erlaubt. Microsoft 365/Graph wird von vdirsyncer NICHT unterstützt.'},
+  nextcloud: {kind:'caldav', label:'Nextcloud', fields:['username','password','cal_url','card_url'],
+              cal_url:'https://cloud.example.com/remote.php/dav/', card_url:'https://cloud.example.com/remote.php/dav/',
+              help:'URL deiner Nextcloud-DAV-Endpunkte.'},
+  fastmail:  {kind:'caldav', label:'Fastmail', fields:['username','password','cal_url','card_url'],
+              cal_url:'https://caldav.fastmail.com/', card_url:'https://carddav.fastmail.com/',
+              help:'App-Passwort von Fastmail verwenden.'},
+  caldav:    {kind:'caldav', label:'CalDAV/CardDAV (generisch)', fields:['username','password','cal_url','card_url'],
+              help:'Beliebiger Server. Kalender-URL und/oder Kontakte-URL eintragen.'},
+};
+const FIELD_LABEL = {username:'Benutzer / E-Mail', password:'Passwort', cal_url:'Kalender-URL (CalDAV)',
+  card_url:'Kontakte-URL (CardDAV)', client_id:'Client ID', client_secret:'Client Secret'};
+
+function $(id){return document.getElementById(id);}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function toast(m,bad){const t=document.createElement('div');t.className='toast'+(bad?' bad':'');t.textContent=m;
+  document.body.appendChild(t);setTimeout(()=>t.remove(),3500);}
+async function api(p,o){const r=await fetch(p,Object.assign({headers:{'Content-Type':'application/json'}},o||{}));
+  if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.status); return r.json();}
+
+function fillGeneral(){
+  $('interval').value=CFG.interval_seconds; $('enabled').checked=CFG.sync_enabled;
+  $('apprise').value=(CFG.alerts.apprise_urls||[]).join('\n');
+  $('al_fail').checked=CFG.alerts.on_failure; $('al_rec').checked=CFG.alerts.on_recovery;
+}
+async function saveGeneral(){
+  CFG.interval_seconds=parseInt($('interval').value)||300; CFG.sync_enabled=$('enabled').checked;
+  CFG.alerts={apprise_urls:$('apprise').value.split('\n').map(s=>s.trim()).filter(Boolean),
+              on_failure:$('al_fail').checked, on_recovery:$('al_rec').checked};
+  try{ await api('/api/config',{method:'POST',body:JSON.stringify(
+        {interval_seconds:CFG.interval_seconds,sync_enabled:CFG.sync_enabled,alerts:CFG.alerts})});
+       $('genmsg').textContent='gespeichert ✓'; }catch(e){ $('genmsg').textContent=e.message; }
+}
+
+// --- ACCOUNTS ---
+function presetForKind(kind){ return kind==='icloud'?PRESETS.icloud : kind==='google'?PRESETS.google : PRESETS.caldav; }
+
+function renderAccounts(){
+  const root=$('accounts'); root.innerHTML='';
+  const ids=Object.keys(CFG.accounts);
+  if(!ids.length){ root.innerHTML='<p class="muted">Noch keine Accounts.</p>'; return; }
+  for(const id of ids){
+    const a=CFG.accounts[id];
+    const div=document.createElement('div'); div.className='item';
+    div.innerHTML=`<div class="row between"><div><b>${esc(a.name||id)}</b>
+      <span class="side ${a.kind}">${a.kind}</span></div>
+      <div class="row gap"><button class="btn small" onclick="editAccount('${id}')">Bearbeiten</button>
+      <button class="btn small danger" onclick="delAccount('${id}')">Löschen</button></div></div>`;
+    root.appendChild(div);
+  }
+}
+
+function addAccount(preset){ accountForm(null, preset); }
+function editAccount(id){ accountForm(id, null); }
+
+function accountForm(id, presetKey){
+  const a = id ? CFG.accounts[id] : {};
+  const preset = presetKey ? PRESETS[presetKey] : presetForKind(a.kind);
+  const kind = preset.kind;
+  const fields = preset.fields.map(f=>{
+    const isSec = ['password','client_secret','client_id'].includes(f);
+    const cur = a[f]||'';
+    const ph = (cur==='__SET__') ? '•••••• (gesetzt)' : (preset[f]||'');
+    const val = (cur==='__SET__') ? '' : esc(cur);
+    return `<label>${FIELD_LABEL[f]||f}
+      <input data-f="${f}" type="${isSec?'password':'text'}" value="${val}" placeholder="${esc(ph)}"></label>`;
+  }).join('');
+  const dlg=document.createElement('div'); dlg.className='overlay';
+  dlg.innerHTML=`<div class="dialog"><h2>${id?'Account bearbeiten':preset.label+' hinzufügen'}</h2>
+    <p class="hint">${esc(preset.help||'')}</p>
+    <label>Anzeigename<input id="acc-name" value="${esc(a.name||preset.label)}"></label>
+    <div class="grid2">${fields}</div>
+    <div class="row gap" style="margin-top:12px">
+      <button class="btn primary" id="acc-save">Speichern</button>
+      <button class="btn" id="acc-cancel">Abbrechen</button>
+      <span class="err" id="acc-msg"></span></div></div>`;
+  document.body.appendChild(dlg);
+  dlg.querySelector('#acc-cancel').onclick=()=>dlg.remove();
+  dlg.querySelector('#acc-save').onclick=async()=>{
+    const payload={kind, name:dlg.querySelector('#acc-name').value};
+    if(id) payload.id=id;
+    dlg.querySelectorAll('[data-f]').forEach(inp=>{
+      const f=inp.dataset.f, isSec=['password','client_secret','client_id'].includes(f);
+      if(inp.value){ payload[f]=inp.value; }
+      else if(isSec && id && a[f]==='__SET__'){ payload[f]='__SET__'; }
+      else { payload[f]=''; }
+    });
+    try{ const r=await api('/api/accounts',{method:'POST',body:JSON.stringify(payload)});
+         CFG=r.config; dlg.remove(); renderAccounts(); renderPairs(); toast('Account gespeichert');
+    }catch(e){ dlg.querySelector('#acc-msg').textContent=e.message; }
+  };
+}
+
+async function delAccount(id){
+  if(!confirm('Account wirklich löschen?'))return;
+  try{ const r=await api('/api/accounts/'+id,{method:'DELETE'}); CFG=r.config; renderAccounts(); renderPairs(); }
+  catch(e){ toast(e.message,true); }
+}
+
+// --- PAIRS ---
+function accountOptions(sel){ return Object.entries(CFG.accounts)
+  .map(([id,a])=>`<option value="${id}" ${id===sel?'selected':''}>${esc(a.name||id)} (${a.kind})</option>`).join(''); }
+
+function addPair(){
+  const ids=Object.keys(CFG.accounts);
+  if(ids.length<2){ toast('Erst mindestens zwei Accounts anlegen',true); return; }
+  const pid='new_'+Math.random().toString(36).slice(2,8);
+  CFG.pairs[pid]={name:'Neues Paar',service:'calendar',a:ids[0],b:ids[1],conflict_resolution:'a wins',collections:[],_new:true};
+  renderPairs();
+}
+
+function renderPairs(){
+  const root=$('pairs'); root.innerHTML='';
+  const ids=Object.keys(CFG.pairs);
+  if(!ids.length){ root.innerHTML='<p class="muted">Noch keine Paare.</p>'; }
+  for(const pid of ids){
+    const p=CFG.pairs[pid];
+    const sec=document.createElement('div'); sec.className='item';
+    sec.innerHTML=`
+      <div class="grid2">
+        <label>Name<input data-p="name" value="${esc(p.name||'')}"></label>
+        <label>Typ<select data-p="service">
+          <option value="calendar" ${p.service==='calendar'?'selected':''}>Kalender</option>
+          <option value="contacts" ${p.service==='contacts'?'selected':''}>Kontakte</option></select></label>
+        <label>Seite A<select data-p="a">${accountOptions(p.a)}</select></label>
+        <label>Seite B<select data-p="b">${accountOptions(p.b)}</select></label>
+        <label>Konfliktlösung<select data-p="conflict_resolution">
+          <option value="a wins" ${p.conflict_resolution==='a wins'?'selected':''}>A gewinnt</option>
+          <option value="b wins" ${p.conflict_resolution==='b wins'?'selected':''}>B gewinnt</option></select></label>
+      </div>
+      <h3>Mappings</h3>
+      <table class="tbl"><thead><tr><th>Kurzname</th><th>A</th><th>B</th><th></th></tr></thead>
+        <tbody id="map-${pid}"></tbody></table>
+      <div class="row gap wrap">
+        <button class="btn" onclick="savePair('${pid}')">Paar speichern</button>
+        <button class="btn" onclick="doDiscover('${pid}')">Collections laden</button>
+        <button class="btn small danger" onclick="delPair('${pid}')">Paar löschen</button>
+        <span class="muted" id="disc-${pid}"></span>
+      </div>
+      <div id="builder-${pid}" class="builder hidden"></div>`;
+    root.appendChild(sec);
+    sec.querySelectorAll('[data-p]').forEach(el=>el.onchange=()=>{ CFG.pairs[pid][el.dataset.p]=el.value; });
+    renderMap(pid);
+  }
+}
+
+function renderMap(pid){
+  const tb=$('map-'+pid); tb.innerHTML=''; const colls=CFG.pairs[pid].collections||[];
+  colls.forEach((c,i)=>{ const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${esc(c[0])}</td><td class="uid">${esc(c[1])}</td><td class="uid">${esc(c[2])}</td>
+      <td><button class="btn small danger" onclick="delMap('${pid}',${i})">×</button></td>`; tb.appendChild(tr); });
+  if(!colls.length) tb.innerHTML='<tr><td colspan="4" class="muted">Noch keine Mappings.</td></tr>';
+}
+function delMap(pid,i){ CFG.pairs[pid].collections.splice(i,1); renderMap(pid); }
+
+async function savePair(pid){
+  const p=CFG.pairs[pid];
+  const payload={name:p.name,service:p.service,a:p.a,b:p.b,conflict_resolution:p.conflict_resolution,collections:p.collections};
+  if(!p._new) payload.id=pid;
+  try{ const r=await api('/api/pairs',{method:'POST',body:JSON.stringify(payload)});
+       CFG=r.config; renderPairs(); toast('Paar gespeichert ✓');
+  }catch(e){ toast(e.message,true); }
+}
+
+async function delPair(pid){
+  if(CFG.pairs[pid]._new){ delete CFG.pairs[pid]; renderPairs(); return; }
+  if(!confirm('Paar löschen?'))return;
+  try{ const r=await api('/api/pairs/'+pid,{method:'DELETE'}); CFG=r.config; renderPairs(); }
+  catch(e){ toast(e.message,true); }
+}
+
+async function doDiscover(pid){
+  if(CFG.pairs[pid]._new){ toast('Bitte zuerst „Paar speichern"',true); return; }
+  const note=$('disc-'+pid); note.textContent='lädt… (10–30s)';
+  try{
+    const res=await api('/api/discover',{method:'POST',body:JSON.stringify({pair:pid})});
+    discovered[pid]=res; note.textContent=`A: ${res.a.collections.length} · B: ${res.b.collections.length} gefunden`;
+    renderBuilder(pid,res);
+  }catch(e){ note.textContent='Fehler: '+e.message; }
+}
+
+function opt(list){ return list.map(c=>`<option value="${esc(c.id)}">${esc(c.name||c.id)}</option>`).join(''); }
+function renderBuilder(pid,res){
+  const box=$('builder-'+pid); box.classList.remove('hidden');
+  box.innerHTML=`<div class="row gap wrap">
+    <label>${esc(res.a.name)} (A)<select id="sa-${pid}">${opt(res.a.collections)}</select></label>
+    <label>${esc(res.b.name)} (B)<select id="sb-${pid}">${opt(res.b.collections)}</select></label>
+    <label>Kurzname<input id="sn-${pid}" placeholder="z.B. arbeit"></label>
+    <button class="btn" onclick="addMap('${pid}')">+ Mapping</button></div>`;
+  const sa=$('sa-'+pid);
+  sa.onchange=()=>{ const c=res.a.collections.find(x=>x.id===sa.value);
+    if(c&&!$('sn-'+pid).value)$('sn-'+pid).value=(c.name||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); };
+  sa.onchange();
+}
+function addMap(pid){
+  const aid=$('sa-'+pid).value, bid=$('sb-'+pid).value;
+  const sn=($('sn-'+pid).value||'').trim()||('map'+(CFG.pairs[pid].collections.length+1));
+  if(!aid||!bid){ toast('Beide Seiten wählen',true); return; }
+  CFG.pairs[pid].collections.push([sn,aid,bid]); $('sn-'+pid).value=''; renderMap(pid);
+}
+
+fillGeneral(); renderAccounts(); renderPairs();
+</script>
+{% endblock %}

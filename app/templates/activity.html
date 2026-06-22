@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}calSync · Aktivität{% endblock %}
+{% block nav_act %}active{% endblock %}
+{% block content %}
+<h1>Aktivität</h1>
+<form class="row gap" method="get" action="/activity">
+  <select name="action">
+    <option value="">alle Aktionen</option>
+    <option value="create" {{ 'selected' if f_action=='create' }}>erstellt</option>
+    <option value="update" {{ 'selected' if f_action=='update' }}>geändert</option>
+    <option value="delete" {{ 'selected' if f_action=='delete' }}>gelöscht</option>
+  </select>
+  <select name="pair">
+    <option value="">alle Paare</option>
+    {% for p in pairs %}<option value="{{ p }}" {{ 'selected' if f_pair==p }}>{{ p }}</option>{% endfor %}
+  </select>
+  <button class="btn" type="submit">Filtern</button>
+</form>
+{% include "_activity_table.html" %}
+{% endblock %}

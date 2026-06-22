@@ -1,0 +1,32 @@
+# --- Secrets & Laufzeitdaten ---
+.env
+data/
+logs/
+config/
+*.token
+*.db
+*.db-wal
+*.db-shm
+.discover.conf
+
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# --- Claude / KI-Artefakte ---
+.claude/
+CLAUDE.md
+.clauderc
+**/memory/
+.cursor/
+.aider*
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

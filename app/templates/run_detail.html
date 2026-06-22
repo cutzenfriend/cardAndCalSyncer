@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}calSync · Lauf #{{ run.id }}{% endblock %}
+{% block nav_runs %}active{% endblock %}
+{% block content %}
+<a class="back" href="/runs">← Läufe</a>
+<h1>Lauf #{{ run.id }} <span class="pill {{ run.status }}">{{ run.status }}</span></h1>
+<div class="meta">
+  <span>Art: <b>{{ run.kind }}</b></span>
+  <span>Paar: <b>{{ run.pair or 'alle' }}</b></span>
+  <span>Trigger: <b>{{ run.trigger }}</b></span>
+  <span>Start: <b>{{ run.started_at }}</b></span>
+  <span>Ende: <b>{{ run.finished_at or '–' }}</b></span>
+  <span>rc: <b>{{ run.rc }}</b></span>
+  <span>+{{ run.n_create }} ~{{ run.n_update }} −{{ run.n_delete }} · {{ run.n_errors }} Fehler</span>
+</div>
+
+{% if activities %}
+<h2>Aktivitäten</h2>
+{% include "_activity_table.html" %}
+{% endif %}
+
+<h2>Log</h2>
+<pre class="logbox">{{ run.log }}</pre>
+{% endblock %}
