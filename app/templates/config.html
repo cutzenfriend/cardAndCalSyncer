@@ -59,7 +59,7 @@ const PRESETS = {
   icloud:    {kind:'icloud', label:'iCloud', fields:['username','password'],
               help:'App-specific password from appleid.apple.com (not your normal password).'},
   google:    {kind:'google', label:'Google', fields:['client_id','client_secret'],
-              help:'OAuth client of type "Web application". Save, then click "Connect Google" below — one consent, no CLI.'},
+              help:'Enable the CalDAV API (and CardDAV API for contacts) in your Google Cloud project, create an OAuth client of type "Web application", then Save and click "Connect Google" below.'},
   microsoft: {kind:'caldav', label:'Microsoft/Outlook', fields:['username','password','cal_url','card_url'],
               cal_url:'https://outlook.office365.com/', card_url:'',
               help:'⚠️ Works only if the account allows CalDAV/CardDAV. Microsoft 365/Graph is NOT supported by vdirsyncer.'},
@@ -310,9 +310,17 @@ async function doDiscover(pid){
     note.appendChild(document.createTextNode(`A: ${na} · B: ${nb} found`));
     const probs=(res.errors||[]);
     if(probs.length || na===0 || nb===0){
-      const det=document.createElement('details'); det.style.marginTop='6px';
       const body=(probs.join('\n')+'\n\n'+(res.log_tail||'')).trim() || 'No details.';
-      det.innerHTML='<summary class="muted">why is a side empty? (details)</summary>';
+      if(/accessNotConfigured|has not been used in project|caldav\.googleapis\.com/i.test(body)){
+        const hint=document.createElement('div'); hint.className='note warn'; hint.style.marginTop='6px';
+        hint.innerHTML='⚠️ Enable Google\'s <b>CalDAV API</b> (and <b>CardDAV API</b> for contacts) '+
+          'in your Google Cloud project, wait ~1 min, then retry — '+
+          '<a target="_blank" rel="noopener" href="https://console.cloud.google.com/apis/library/caldav.googleapis.com">Enable CalDAV</a> · '+
+          '<a target="_blank" rel="noopener" href="https://console.cloud.google.com/apis/library/carddav.googleapis.com">Enable CardDAV</a>';
+        note.appendChild(hint);
+      }
+      const det=document.createElement('details'); det.style.marginTop='6px';
+      det.innerHTML='<summary class="muted">discovery details</summary>';
       const pre=document.createElement('pre'); pre.className='logbox'; pre.textContent=body; det.appendChild(pre);
       note.appendChild(det);
     }

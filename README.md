@@ -14,7 +14,7 @@ parses its output into a SQLite DB and shows everything in the browser.
 - **Bidirectional**, any number of calendars/address books, mappable in the UI
 - Supported providers:
   - **iCloud** (CalDAV/CardDAV, app-specific password → full write access)
-  - **Google** (official Calendar API + People API, OAuth2)
+  - **Google** (Google's CalDAV & CardDAV APIs, OAuth2)
   - **Microsoft / Outlook** and **any CalDAV/CardDAV server** (Nextcloud, Fastmail, mailbox.org, your own server …)
 - **Web UI** (port 8080): dashboard, activity (what/when/where/source→target), runs, live logs
 - **Fully configurable in the UI**: accounts, pairs, discovery, mappings, interval
@@ -86,13 +86,20 @@ To update: `docker compose pull && docker compose up -d`.
 
 ### Connecting Google (one click)
 
-1. In the [Google Cloud Console](https://console.cloud.google.com) create an
-   OAuth client of type **Web application**.
-2. Add an **Authorized redirect URI** — CaCs shows the exact value to use in the
+1. In the [Google Cloud Console](https://console.cloud.google.com), **enable the
+   APIs vdirsyncer uses** (these are *not* the "Calendar API" / "People API"):
+   - **CalDAV API** — <https://console.cloud.google.com/apis/library/caldav.googleapis.com>
+   - **CardDAV API** (only for contacts) — <https://console.cloud.google.com/apis/library/carddav.googleapis.com>
+2. Create an OAuth client of type **Web application**.
+3. Add an **Authorized redirect URI** — CaCs shows the exact value to use in the
    account dialog. It is `<base-url>/oauth/google/callback`.
-3. In CaCs: add a Google account, paste **Client ID** + **Client secret**, save,
+4. In CaCs: add a Google account, paste **Client ID** + **Client secret**, save,
    reopen it and click **Connect Google**. Approve the consent screen — done.
    CaCs stores the token itself; no CLI, no copying files.
+
+> If discovery returns **0 Google collections** with `accessNotConfigured` in the
+> details, you skipped step 1 — enable the CalDAV (and CardDAV) API, wait a minute,
+> and retry.
 
 > **Redirect URI rule (Google):** Google only accepts redirect URIs that are
 > `https://…` or `http://localhost` / `http://127.0.0.1`. A **LAN IP**
