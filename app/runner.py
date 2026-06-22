@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -51,6 +52,9 @@ class Runner:
         self.store = store
         self._lock = asyncio.Lock()
         self.busy = False
+        self.busy_since: float | None = None
+        self.busy_what: str | None = None
+        self._op_task: asyncio.Task | None = None
 
     # --- subprocess --------------------------------------------------------
     async def _exec(self, cmd: list[str], secret_env: dict[str, str],
@@ -116,6 +120,14 @@ class Runner:
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
 
+    def cancel(self) -> bool:
+        """Cancel the currently-running operation (frees the lock)."""
+        t = self._op_task
+        if t is not None and not t.done():
+            t.cancel()
+            return True
+        return False
+
     # --- sync --------------------------------------------------------------
     async def run_sync_all(self, trigger: str = "scheduled") -> list[dict[str, Any]]:
         """Sync every configured pair as its own run (so runs are separated by pair)."""
@@ -133,10 +145,14 @@ class Runner:
                        trigger: str = "scheduled") -> dict[str, Any]:
         async with self._lock:
             self.busy = True
+            self.busy_since = time.time()
+            self._op_task = asyncio.current_task()
             try:
                 return await self._run_sync_inner(pair, collection, trigger)
             finally:
                 self.busy = False
+                self.busy_since = None
+                self._op_task = None
 
     async def _run_sync_inner(self, pair: str | None, collection: str | None,
                               trigger: str) -> dict[str, Any]:
@@ -251,11 +267,15 @@ class Runner:
                     collection: str | None = None) -> dict[str, Any]:
         async with self._lock:
             self.busy = True
+            self.busy_since = time.time()
+            self._op_task = asyncio.current_task()
             run_id = None
             try:
                 if execute:
                     run_id = self.db.start_run("clear", pair, "manual", _now())
-                res = await clear_mod.run_clear(self.store, pair, side, months, execute, collection)
+                res = await asyncio.wait_for(
+                    clear_mod.run_clear(self.store, pair, side, months, execute, collection),
+                    timeout=900)
                 if run_id is not None:
                     self.db.finish_run(
                         run_id, status="failed" if res["errors"] else "success",
@@ -274,36 +294,50 @@ class Runner:
                 raise
             finally:
                 self.busy = False
+                self.busy_since = None
+                self._op_task = None
 
     # --- resolve activity titles (read-only backfill) ----------------------
     async def resolve_names(self, pair: str | None = None,
                             collection: str | None = None) -> dict[str, Any]:
         async with self._lock:
             self.busy = True
+            self.busy_since = time.time()
+            self._op_task = asyncio.current_task()
             try:
                 if pair:
-                    return await enrich.resolve(self.store, self.db, pair, collection)
+                    return await asyncio.wait_for(
+                        enrich.resolve(self.store, self.db, pair, collection), timeout=600)
                 total, errs = 0, []
                 for pid in self.store.get()["pairs"]:
-                    r = await enrich.resolve(self.store, self.db, pid)
-                    total += r["resolved"]
-                    errs += r["errors"]
+                    try:
+                        r = await asyncio.wait_for(
+                            enrich.resolve(self.store, self.db, pid), timeout=600)
+                        total += r["resolved"]
+                        errs += r["errors"]
+                    except asyncio.TimeoutError:
+                        errs.append(f"{pid}: timed out")
                 return {"resolved": total, "errors": errs}
             finally:
                 self.busy = False
+                self.busy_since = None
+                self._op_task = None
 
     # --- fix long UIDs (rewrites items) ------------------------------------
     async def fix_uids(self, pair: str, side: str, collection: str | None,
                        threshold: int, execute: bool) -> dict[str, Any]:
         async with self._lock:
             self.busy = True
+            self.busy_since = time.time()
+            self._op_task = asyncio.current_task()
             run_id = None
             try:
                 if execute:
                     run_id = self.db.start_run("repair", pair, "manual", _now(),
                                                collection=collection)
-                res = await fixuids.run_fix(self.store, pair, side, collection,
-                                            threshold, execute)
+                res = await asyncio.wait_for(
+                    fixuids.run_fix(self.store, pair, side, collection, threshold, execute),
+                    timeout=900)
                 if run_id is not None:
                     self.db.finish_run(
                         run_id, status="failed" if res["errors"] else "success",
@@ -322,15 +356,21 @@ class Runner:
                 raise
             finally:
                 self.busy = False
+                self.busy_since = None
+                self._op_task = None
 
     # --- discover ----------------------------------------------------------
     async def discover(self, pair: str, list_all: bool = True) -> dict[str, Any]:
         async with self._lock:
             self.busy = True
+            self.busy_since = time.time()
+            self._op_task = asyncio.current_task()
             try:
                 return await self._discover_inner(pair, list_all)
             finally:
                 self.busy = False
+                self.busy_since = None
+                self._op_task = None
 
     async def _discover_inner(self, pair: str, list_all: bool) -> dict[str, Any]:
         cfg = self.store.get()

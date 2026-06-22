@@ -17,6 +17,7 @@
       <a href="/config" class="{% block nav_cfg %}{% endblock %}">Configuration</a>
     </nav>
     <span id="livebadge" class="badge badge-idle">…</span>
+    <button id="stopbtn" class="btn small danger hidden" onclick="cancelOp()">Stop</button>
     <a href="/logout" class="logout" title="Sign out">⎋</a>
   </header>
   <main class="container">
@@ -33,11 +34,16 @@
       try{
         const s = await api('/api/status');
         const b = document.getElementById('livebadge');
-        if(s.busy){ b.textContent='Sync running…'; b.className='badge badge-run'; }
-        else if(!s.sync_enabled){ b.textContent='paused'; b.className='badge badge-off'; }
+        const stop = document.getElementById('stopbtn');
+        if(s.busy){ b.textContent='running…'+(s.busy_for!=null?' '+s.busy_for+'s':''); b.className='badge badge-run'; stop.classList.remove('hidden'); }
+        else if(!s.sync_enabled){ b.textContent='paused'; b.className='badge badge-off'; stop.classList.add('hidden'); }
         else { const eta = s.next_run_in!=null ? ' · next in '+s.next_run_in+'s':'';
-               b.textContent='active'+eta; b.className='badge badge-ok'; }
+               b.textContent='active'+eta; b.className='badge badge-ok'; stop.classList.add('hidden'); }
       }catch(e){ /* ignore */ }
+    }
+    async function cancelOp(){
+      try{ await api('/api/cancel',{method:'POST',body:'{}'}); }catch(e){}
+      setTimeout(refreshBadge, 300);
     }
     setInterval(refreshBadge, 4000); refreshBadge();
   </script>

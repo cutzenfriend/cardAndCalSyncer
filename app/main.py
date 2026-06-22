@@ -142,6 +142,13 @@ def _spawn(coro) -> None:
     t.add_done_callback(_bg_tasks.discard)
 
 
+def _require_idle() -> None:
+    if runner.busy:
+        secs = int(time.time() - runner.busy_since) if runner.busy_since else 0
+        raise HTTPException(409, f"Another operation is running ({secs}s). "
+                                 "Use Stop (top right) to cancel it, then retry.")
+
+
 def _set_session(resp: Response, username: str, remember: bool) -> None:
     token = auth.make_token(username, remember)
     kw: dict[str, Any] = dict(httponly=True, samesite="lax", path="/")
@@ -154,8 +161,10 @@ def _status_payload() -> dict[str, Any]:
     cfg = store.get()
     last = db.last_run("sync")
     eta = max(0, int(sched.next_run_at - time.time())) if sched.next_run_at else None
+    busy_for = int(time.time() - runner.busy_since) if runner.busy and runner.busy_since else None
     return {
         "busy": runner.busy,
+        "busy_for": busy_for,
         "sync_enabled": cfg.get("sync_enabled", True),
         "interval_seconds": cfg.get("interval_seconds", 300),
         "next_run_in": eta,
@@ -498,8 +507,7 @@ async def _do_clear(request: Request, execute: bool) -> dict[str, Any]:
         raise HTTPException(400, "Unknown pair")
     if side not in ("a", "b"):
         raise HTTPException(400, "Invalid side")
-    if runner.busy:
-        raise HTTPException(409, "Another operation is running")
+    _require_idle()
     try:
         return await runner.clear(pair, side, months, execute=execute, collection=collection)
     except ValueError as exc:
@@ -528,8 +536,7 @@ async def _do_fix(request: Request, execute: bool) -> dict[str, Any]:
         raise HTTPException(400, "Unknown pair")
     if side not in ("a", "b"):
         raise HTTPException(400, "Invalid side")
-    if runner.busy:
-        raise HTTPException(409, "Another operation is running")
+    _require_idle()
     try:
         return await runner.fix_uids(pair, side, collection, threshold, execute=execute)
     except ValueError as exc:
@@ -555,8 +562,7 @@ async def api_discover(request: Request, _: str = Depends(require_api)):
     pair = body.get("pair")
     if pair not in store.get()["pairs"]:
         raise HTTPException(400, "Unknown pair")
-    if runner.busy:
-        raise HTTPException(409, "Another operation is already running")
+    _require_idle()
     return await runner.discover(pair, list_all=True)
 
 
@@ -567,8 +573,7 @@ async def api_sync(request: Request, _: str = Depends(require_api)):
         body = await request.json()
     except Exception:
         pass
-    if runner.busy:
-        raise HTTPException(409, "Sync already running")
+    _require_idle()
     pair = body.get("pair") or None
     collection = body.get("collection") or None
     if pair:
@@ -587,8 +592,7 @@ async def api_resolve(request: Request, _: str = Depends(require_api)):
         body = await request.json()
     except Exception:
         pass
-    if runner.busy:
-        raise HTTPException(409, "Another operation is running")
+    _require_idle()
     return await runner.resolve_names(pair=body.get("pair") or None,
                                       collection=body.get("collection") or None)
 
@@ -602,6 +606,11 @@ async def api_clear_activity(request: Request, _: str = Depends(require_api)):
     older = int(body.get("older_than_days") or 0)
     deleted = db.clear_activities(since=_since(older))
     return {"ok": True, "deleted": deleted}
+
+
+@app.post("/api/cancel")
+def api_cancel(_: str = Depends(require_api)):
+    return {"ok": True, "cancelled": runner.cancel()}
 
 
 @app.post("/api/toggle")
