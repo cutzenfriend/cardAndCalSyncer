@@ -144,7 +144,16 @@ function accountForm(id, presetKey){
           <button class="btn primary" id="acc-connect">Connect Google</button>
           <span class="${a.google_connected?'side google':'muted'}">${a.google_connected?'✓ connected':'not connected'}</span>
         </div>
-        <p class="hint">Saves the account, then opens Google's consent screen once.</p></div>`;
+        <div id="paste-wrap" class="hidden" style="margin-top:10px">
+          <p class="hint">A new tab opened Google's consent screen. After approving, your browser
+          lands on the redirect URI — if it shows a "can't connect" page (normal on a LAN/headless
+          host), copy the full address from the address bar and paste it here:</p>
+          <textarea id="paste" rows="2" placeholder="http://localhost:9119/oauth/google/callback?code=..."></textarea>
+          <button class="btn" id="acc-finish">Finish connection</button>
+        </div>
+        <p class="hint">Local/LAN tip: set <b>Public base URL</b> (General) to
+        <code>http://localhost:&lt;published port&gt;</code> and register that localhost redirect —
+        Google rejects LAN IPs.</p></div>`;
     } else {
       gblock = `<p class="hint">Save this account first, then reopen it to connect Google.</p>`;
     }
@@ -185,8 +194,22 @@ function accountForm(id, presetKey){
   };
   const connectBtn=dlg.querySelector('#acc-connect');
   if(connectBtn) connectBtn.onclick=async()=>{
-    try{ const savedId=await save(); window.location='/oauth/google/start?account='+encodeURIComponent(savedId); }
-    catch(e){ dlg.querySelector('#acc-msg').textContent=e.message; }
+    const w=window.open('about:blank','_blank');   // open synchronously (popup-blocker safe)
+    try{
+      const savedId=await save();
+      const url='/oauth/google/start?account='+encodeURIComponent(savedId);
+      if(w) w.location=url; else window.open(url,'_blank');
+      dlg.querySelector('#paste-wrap').classList.remove('hidden');
+    }catch(e){ if(w) w.close(); dlg.querySelector('#acc-msg').textContent=e.message; }
+  };
+  const finishBtn=dlg.querySelector('#acc-finish');
+  if(finishBtn) finishBtn.onclick=async()=>{
+    try{
+      await api('/api/google/finish',{method:'POST',
+        body:JSON.stringify({account:id, response:dlg.querySelector('#paste').value})});
+      CFG=await api('/api/config'); dlg.remove(); renderAccounts(); renderPairs();
+      toast('Google connected ✓');
+    }catch(e){ dlg.querySelector('#acc-msg').textContent=e.message; }
   };
 }
 

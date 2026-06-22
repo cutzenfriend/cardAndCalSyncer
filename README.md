@@ -95,14 +95,25 @@ To update: `docker compose pull && docker compose up -d`.
    CaCs stores the token itself; no CLI, no copying files.
 
 > **Redirect URI rule (Google):** Google only accepts redirect URIs that are
-> `https://…` or `http://localhost` / `http://127.0.0.1`. So:
-> - Browsing CaCs at `http://localhost:8080` → works out of the box.
-> - Behind a reverse proxy with HTTPS → set **Public base URL** in
->   *Configuration → General* to your `https://…` address.
-> - Plain-HTTP on a LAN IP (e.g. `http://192.168.x.x:8080`) is rejected by
->   Google — connect once via an SSH tunnel to `localhost`, or put CaCs behind HTTPS.
->
-> The token is refreshed automatically afterwards, so this is a one-time step.
+> `https://…` or `http://localhost` / `http://127.0.0.1`. A **LAN IP**
+> (`http://192.168.x.x:port`) is **always rejected** — so don't register that.
+
+**Local / LAN setup (no domain, no HTTPS, no tunnel):**
+
+1. In *Configuration → General*, set **Public base URL** to
+   `http://localhost:<the host port you published>` (e.g. `http://localhost:9119`) and save.
+2. Register exactly `http://localhost:9119/oauth/google/callback` in your Google
+   "Web application" OAuth client (the account dialog shows the exact URI).
+3. Add the Google account, paste Client ID + secret, save, reopen, click **Connect Google**.
+   A new tab opens Google's consent screen.
+4. After approving, your browser is redirected to that `localhost` URL. If CaCs
+   isn't reachable at `localhost` from that browser, the tab shows a "can't
+   connect" page — that's expected. **Copy the full address from the address bar**
+   and paste it into the **Finish connection** box. Done.
+
+(If you browse CaCs from the same host, or via an HTTPS reverse proxy whose URL
+you put in Public base URL, the redirect completes automatically and you can skip
+the copy-paste.) The token is refreshed automatically afterwards — one-time step.
 
 ## Interface
 

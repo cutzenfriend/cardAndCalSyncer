@@ -258,6 +258,43 @@ def google_oauth_start(account: str, request: Request, _: str = Depends(require_
     return RedirectResponse(f"{GOOGLE_AUTH_URL}?{params}", status_code=303)
 
 
+def _google_complete(request: Request, acc_id: str, code: str) -> None:
+    """Exchange an auth code for tokens, store them, mark the account connected.
+
+    Raises ValueError('unknown_account'|'no_refresh_token') for handled cases.
+    """
+    acc = store.account(acc_id)
+    if not acc or acc.get("kind") != "google":
+        raise ValueError("unknown_account")
+    body = urllib.parse.urlencode({
+        "code": code,
+        "client_id": acc["client_id"],
+        "client_secret": acc["client_secret"],
+        "redirect_uri": _google_redirect_uri(request),
+        "grant_type": "authorization_code",
+    }).encode()
+    req = urllib.request.Request(
+        GOOGLE_TOKEN_URL, data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        token = json.load(r)
+    if not token.get("refresh_token"):
+        raise ValueError("no_refresh_token")
+    _write_google_token(acc_id, token)
+    accounts = store.get()["accounts"]
+    accounts[acc_id]["google_connected"] = True
+    store.replace("accounts", accounts)
+    log.info("Google account %s connected", acc_id)
+
+
+def _parse_oauth_response(pasted: str) -> tuple[str | None, str | None]:
+    """Extract (code, state) from a pasted full redirect URL or query string."""
+    pasted = (pasted or "").strip()
+    query = urllib.parse.urlparse(pasted).query or pasted
+    params = urllib.parse.parse_qs(query)
+    return (params.get("code", [None])[0], params.get("state", [None])[0])
+
+
 @app.get("/oauth/google/callback")
 def google_oauth_callback(request: Request, _: str = Depends(require_page),
                           code: str | None = None, state: str | None = None,
@@ -267,34 +304,40 @@ def google_oauth_callback(request: Request, _: str = Depends(require_page),
     data = auth.unsign(state)
     if not data or "acc" not in data or not code:
         return RedirectResponse("/config?google=error&msg=invalid_state", status_code=303)
-    acc_id = data["acc"]
-    acc = store.account(acc_id)
-    if not acc or acc.get("kind") != "google":
-        return RedirectResponse("/config?google=error&msg=unknown_account", status_code=303)
     try:
-        body = urllib.parse.urlencode({
-            "code": code,
-            "client_id": acc["client_id"],
-            "client_secret": acc["client_secret"],
-            "redirect_uri": _google_redirect_uri(request),
-            "grant_type": "authorization_code",
-        }).encode()
-        req = urllib.request.Request(
-            GOOGLE_TOKEN_URL, data=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            token = json.load(r)
-        if not token.get("refresh_token"):
-            return RedirectResponse("/config?google=error&msg=no_refresh_token", status_code=303)
-        _write_google_token(acc_id, token)
-        accounts = store.get()["accounts"]
-        accounts[acc_id]["google_connected"] = True
-        store.replace("accounts", accounts)
-        log.info("Google account %s connected", acc_id)
+        _google_complete(request, data["acc"], code)
+    except ValueError as e:
+        return RedirectResponse(f"/config?google=error&msg={urllib.parse.quote(str(e))}", status_code=303)
     except Exception as exc:
         log.exception("Google OAuth exchange failed")
         return RedirectResponse(f"/config?google=error&msg={urllib.parse.quote(str(exc)[:120])}", status_code=303)
     return RedirectResponse("/config?google=connected", status_code=303)
+
+
+@app.post("/api/google/finish")
+async def google_finish(request: Request, _: str = Depends(require_api)):
+    """Complete the connect by pasting the redirected URL (no-redirect-reachable case)."""
+    body = await request.json()
+    acc_id = body.get("account")
+    if acc_id not in store.get()["accounts"]:
+        raise HTTPException(400, "Unknown account")
+    code, state = _parse_oauth_response(body.get("response", ""))
+    if state:
+        d = auth.unsign(state)
+        if not d or d.get("acc") != acc_id:
+            raise HTTPException(400, "State mismatch — start the connect again")
+    if not code:
+        raise HTTPException(400, "No 'code=' found in the pasted URL")
+    try:
+        _google_complete(request, acc_id, code)
+    except ValueError as e:
+        msg = {"no_refresh_token": "No refresh token returned — revoke CaCs under your "
+               "Google account's third-party access, then connect again.",
+               "unknown_account": "Unknown account"}.get(str(e), str(e))
+        raise HTTPException(400, msg)
+    except Exception as exc:
+        raise HTTPException(502, f"Token exchange failed: {exc}")
+    return {"ok": True}
 
 
 # --- HTML pages ------------------------------------------------------------
