@@ -10,6 +10,7 @@ import time
 import urllib.parse
 import urllib.request
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from typing import Any
 
 import confgen
@@ -369,13 +370,20 @@ def run_detail(run_id: int, request: Request, _: str = Depends(require_page)):
         "activities": [dict(a) for a in db.run_activities(run_id)]})
 
 
+def _since(days: int | None) -> str | None:
+    if not days or days <= 0:
+        return None
+    return (datetime.now().astimezone() - timedelta(days=days)).isoformat(timespec="seconds")
+
+
 @app.get("/activity", response_class=HTMLResponse)
-def activity_page(request: Request, action: str | None = None,
-                  pair: str | None = None, _: str = Depends(require_page)):
+def activity_page(request: Request, action: str | None = None, pair: str | None = None,
+                  days: int | None = None, _: str = Depends(require_page)):
     pairs = [p.get("name") or pid for pid, p in store.get()["pairs"].items()]
     return templates.TemplateResponse(request, "activity.html", {
-        "activities": [dict(a) for a in db.recent_activities(limit=300, action=action, pair=pair)],
-        "f_action": action or "", "f_pair": pair or "", "pairs": pairs})
+        "activities": [dict(a) for a in db.recent_activities(
+            limit=500, action=action, pair=pair, since=_since(days))],
+        "f_action": action or "", "f_pair": pair or "", "f_days": days or 0, "pairs": pairs})
 
 
 @app.get("/logs", response_class=HTMLResponse)
@@ -534,6 +542,17 @@ async def api_sync(request: Request, _: str = Depends(require_api)):
         raise HTTPException(409, "Sync already running")
     _spawn(runner.run_sync(pair=body.get("pair") or None, trigger="manual"))
     return {"ok": True, "started": True}
+
+
+@app.post("/api/activity/clear")
+async def api_clear_activity(request: Request, _: str = Depends(require_api)):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    older = int(body.get("older_than_days") or 0)
+    deleted = db.clear_activities(since=_since(older))
+    return {"ok": True, "deleted": deleted}
 
 
 @app.post("/api/toggle")

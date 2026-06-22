@@ -3,18 +3,44 @@
 {% block nav_act %}active{% endblock %}
 {% block content %}
 <h1>Activity</h1>
-<form class="row gap" method="get" action="/activity">
-  <select name="action">
-    <option value="">all actions</option>
-    <option value="create" {{ 'selected' if f_action=='create' }}>created</option>
-    <option value="update" {{ 'selected' if f_action=='update' }}>updated</option>
-    <option value="delete" {{ 'selected' if f_action=='delete' }}>deleted</option>
-  </select>
-  <select name="pair">
-    <option value="">all pairs</option>
-    {% for p in pairs %}<option value="{{ p }}" {{ 'selected' if f_pair==p }}>{{ p }}</option>{% endfor %}
-  </select>
-  <button class="btn" type="submit">Filter</button>
-</form>
+<div class="row gap between wrap">
+  <form class="row gap wrap" method="get" action="/activity">
+    <select name="action">
+      <option value="">all actions</option>
+      <option value="create" {{ 'selected' if f_action=='create' }}>created</option>
+      <option value="update" {{ 'selected' if f_action=='update' }}>updated</option>
+      <option value="delete" {{ 'selected' if f_action=='delete' }}>deleted</option>
+    </select>
+    <select name="pair">
+      <option value="">all pairs</option>
+      {% for p in pairs %}<option value="{{ p }}" {{ 'selected' if f_pair==p }}>{{ p }}</option>{% endfor %}
+    </select>
+    <select name="days">
+      <option value="0" {{ 'selected' if f_days==0 }}>any time</option>
+      <option value="1" {{ 'selected' if f_days==1 }}>last 24 h</option>
+      <option value="7" {{ 'selected' if f_days==7 }}>last 7 days</option>
+      <option value="30" {{ 'selected' if f_days==30 }}>last 30 days</option>
+      <option value="90" {{ 'selected' if f_days==90 }}>last 90 days</option>
+    </select>
+    <button class="btn" type="submit">Filter</button>
+  </form>
+  <div class="row gap">
+    <input id="clrdays" type="number" min="0" placeholder="0" title="older than N days (0 = all)" style="width:5em">
+    <button class="btn small danger" onclick="clearLog()">Clear log</button>
+  </div>
+</div>
 {% include "_activity_table.html" %}
+{% endblock %}
+{% block scripts %}
+<script>
+  async function clearLog(){
+    const d=parseInt(document.getElementById('clrdays').value)||0;
+    const msg=d>0 ? 'Delete activity log entries older than '+d+' days?'
+                  : 'Delete ALL activity log entries? (sync history under Runs is kept)';
+    if(!confirm(msg)) return;
+    try{ const r=await api('/api/activity/clear',{method:'POST',body:JSON.stringify({older_than_days:d})});
+         location.href='/activity'; }
+    catch(e){ alert(e.message); }
+  }
+</script>
 {% endblock %}

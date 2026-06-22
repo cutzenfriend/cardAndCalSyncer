@@ -142,13 +142,15 @@ class Database:
             return cur.fetchall()
 
     def recent_activities(self, limit: int = 100, action: str | None = None,
-                          pair: str | None = None) -> list[sqlite3.Row]:
+                          pair: str | None = None, since: str | None = None) -> list[sqlite3.Row]:
         q = "SELECT * FROM activities"
         where, params = [], []
         if action:
             where.append("action=?"); params.append(action)
         if pair:
             where.append("pair=?"); params.append(pair)
+        if since:
+            where.append("ts>=?"); params.append(since)
         if where:
             q += " WHERE " + " AND ".join(where)
         q += " ORDER BY id DESC LIMIT ?"
@@ -156,6 +158,15 @@ class Database:
         with self._cursor() as cur:
             cur.execute(q, params)
             return cur.fetchall()
+
+    def clear_activities(self, since: str | None = None) -> int:
+        """Delete activity rows (all, or only those older than `since`)."""
+        with self._cursor() as cur:
+            if since:
+                cur.execute("DELETE FROM activities WHERE ts < ?", (since,))
+            else:
+                cur.execute("DELETE FROM activities")
+            return cur.rowcount
 
     def last_run(self, kind: str = "sync") -> sqlite3.Row | None:
         with self._cursor() as cur:

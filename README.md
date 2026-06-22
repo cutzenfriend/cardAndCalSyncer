@@ -127,7 +127,7 @@ the copy-paste.) The token is refreshed automatically afterwards — one-time st
 | Page | Content |
 |---|---|
 | **Dashboard** | status, next run, totals, recent runs & activity, manual sync, pause |
-| **Activity** | each object: time · action (created/updated/deleted) · pair · **calendar name** · **source → target** · item (title + date when resolvable, else UID) |
+| **Activity** | each object: time · action (created/updated/deleted) · pair · **calendar name** · **source → target** · item (title + date when resolvable, else UID). Filter by action/pair/time window, and clear the log (all or older than N days) |
 | **Runs** | every sync/discover with counts, status, rc and the full log |
 | **Logs** | live tail of `vdirsyncer.log` |
 | **Configuration** | accounts, sync pairs, discovery/mappings, interval, alerts, login |
