@@ -80,51 +80,50 @@ async def run_clear(store, pair_id: str, side: str, months: int,
                 continue
             try:
                 storage = await storage_instance_from_config(conf, create=False, connector=conn)
-                items = await storage.list()
+                # storage.list() is an async generator -> iterate with `async for`
+                async for href, etag in storage.list():
+                    if processed >= MAX_ITEMS:
+                        break
+                    processed += 1
+                    if cutoff is None:
+                        # no date window: every item qualifies
+                        count += 1
+                        if not execute and len(samples) < 8:
+                            try:
+                                it, _ = await storage.get(href)
+                                t, _ = enrich.parse_item(it.raw)
+                                if t:
+                                    samples.append(t)
+                            except Exception:
+                                pass
+                        if execute:
+                            try:
+                                await storage.delete(href, etag)
+                                deleted += 1
+                            except Exception as exc:
+                                errors.append(f"{short}: delete failed: {exc}")
+                    else:
+                        # date window: keep old/undateable, act on recent (>= cutoff)
+                        try:
+                            it, _ = await storage.get(href)
+                            d = _item_date(it.raw)
+                            t, _ = enrich.parse_item(it.raw)
+                        except Exception:
+                            continue  # can't evaluate -> keep (safe)
+                        if d is None or d < cutoff:
+                            continue
+                        count += 1
+                        if t and len(samples) < 8:
+                            samples.append(t)
+                        if execute:
+                            try:
+                                await storage.delete(href, etag)
+                                deleted += 1
+                            except Exception as exc:
+                                errors.append(f"{short}: delete failed: {exc}")
             except Exception as exc:
                 errors.append(f"{short}: {exc}")
                 continue
-
-            for href, etag in items:
-                if processed >= MAX_ITEMS:
-                    break
-                processed += 1
-                if cutoff is None:
-                    # no date window: every item qualifies
-                    count += 1
-                    if not execute and len(samples) < 8:
-                        try:
-                            it, _ = await storage.get(href)
-                            t, _ = enrich.parse_item(it.raw)
-                            if t:
-                                samples.append(t)
-                        except Exception:
-                            pass
-                    if execute:
-                        try:
-                            await storage.delete(href, etag)
-                            deleted += 1
-                        except Exception as exc:
-                            errors.append(f"{short}: delete failed: {exc}")
-                else:
-                    # date window: keep old/undateable, act on recent (>= cutoff)
-                    try:
-                        it, _ = await storage.get(href)
-                        d = _item_date(it.raw)
-                        t, _ = enrich.parse_item(it.raw)
-                    except Exception:
-                        continue  # can't evaluate -> keep (safe)
-                    if d is None or d < cutoff:
-                        continue
-                    count += 1
-                    if t and len(samples) < 8:
-                        samples.append(t)
-                    if execute:
-                        try:
-                            await storage.delete(href, etag)
-                            deleted += 1
-                        except Exception as exc:
-                            errors.append(f"{short}: delete failed: {exc}")
 
     return {"count": count, "deleted": deleted, "samples": samples,
             "errors": errors, "account": acc.get("name", acc_id), "side": side,
