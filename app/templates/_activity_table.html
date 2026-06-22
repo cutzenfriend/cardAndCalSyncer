@@ -1,5 +1,5 @@
 <table class="tbl">
-  <thead><tr><th>Time</th><th>Action</th><th>Pair</th><th>Collection</th><th>Direction</th><th>Object (UID)</th></tr></thead>
+  <thead><tr><th>Time</th><th>Action</th><th>Pair</th><th>Calendar</th><th>Direction</th><th>Item</th></tr></thead>
   <tbody>
   {% for a in activities %}
     <tr>
@@ -8,12 +8,19 @@
         {% if a.action=='create' %}created{% elif a.action=='update' %}updated{% else %}deleted{% endif %}
       </span></td>
       <td>{{ a.pair or '–' }}</td>
-      <td>{{ a.collection or '–' }}</td>
+      <td>{{ a.collection_label or a.collection or '–' }}</td>
       <td class="nowrap">
         {% if a.src_name %}<span class="side {{ a.src_kind }}">{{ a.src_name }}</span> →{% endif %}
         <span class="side {{ a.dst_kind }}">{{ a.dst_name or '?' }}</span>
       </td>
-      <td class="uid">{{ a.ident }}</td>
+      <td>
+        {% if a.title %}
+          <div>{{ a.title }}</div>
+          {% if a.subtitle %}<div class="muted">{{ a.subtitle }}</div>{% endif %}
+        {% else %}
+          <span class="uid" title="item UID (enable item details to see titles)">{{ a.ident }}</span>
+        {% endif %}
+      </td>
     </tr>
   {% else %}<tr><td colspan="6" class="muted">No activity.</td></tr>{% endfor %}
   </tbody>

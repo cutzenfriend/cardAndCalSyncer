@@ -462,6 +462,7 @@ async def api_save_pair(request: Request, _: str = Depends(require_api)):
         "direction": direction,
         "conflict_resolution": body.get("conflict_resolution", "a wins"),
         "collections": body.get("collections", pairs.get(pid, {}).get("collections", [])),
+        "labels": body.get("labels", pairs.get(pid, {}).get("labels", {})),
     }
     store.replace("pairs", pairs)
     if pairs[pid]["collections"]:

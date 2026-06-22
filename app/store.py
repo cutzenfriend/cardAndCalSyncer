@@ -118,8 +118,12 @@ class ConfigStore:
         svc = pair.get("service", "calendar")
         return storage_name(pair["a"], svc), storage_name(pair["b"], svc)
 
-    def resolve_dest(self, dest_storage: str) -> dict[str, Any] | None:
-        """From an activity's destination storage, derive pair + source/target account."""
+    def resolve_dest(self, dest_storage: str, collection: str | None = None) -> dict[str, Any] | None:
+        """From an activity's destination storage, derive pair + source/target account.
+
+        If `collection` (the mapping short name) is given, also resolve the real
+        calendar/address-book display name from the pair's stored labels.
+        """
         cfg = self.get()
         accs = cfg["accounts"]
         for pid, p in cfg["pairs"].items():
@@ -130,8 +134,10 @@ class ConfigStore:
                 dst, src = p["b"], p["a"]
             else:
                 continue
+            label = (p.get("labels", {}) or {}).get(collection) if collection else None
             return {
                 "pair": p.get("name") or pid,
+                "collection_label": label or collection,
                 "dst_name": accs.get(dst, {}).get("name", dst),
                 "dst_kind": accs.get(dst, {}).get("kind", "caldav"),
                 "src_name": accs.get(src, {}).get("name", src),

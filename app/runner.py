@@ -171,12 +171,13 @@ class Runner:
         parsed = parser.parse_sync_output(lines)
 
         for act in parsed.activities:
-            info = self.store.resolve_dest(act.dest_storage) or {}
+            info = self.store.resolve_dest(act.dest_storage, act.collection) or {}
             self.db.add_activity(run_id, _now(), {
                 "action": act.action,
                 "ident": act.ident,
                 "pair": info.get("pair"),
                 "collection": act.collection,
+                "collection_label": info.get("collection_label") or act.collection,
                 "src_name": info.get("src_name"),
                 "src_kind": info.get("src_kind"),
                 "dst_name": info.get("dst_name"),

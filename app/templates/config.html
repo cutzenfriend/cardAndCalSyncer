@@ -227,7 +227,7 @@ function addPair(){
   const ids=Object.keys(CFG.accounts);
   if(ids.length<2){ toast('Add at least two accounts first',true); return; }
   const pid='new_'+Math.random().toString(36).slice(2,8);
-  CFG.pairs[pid]={name:'New pair',service:'calendar',a:ids[0],b:ids[1],direction:'both',conflict_resolution:'a wins',collections:[],_new:true};
+  CFG.pairs[pid]={name:'New pair',service:'calendar',a:ids[0],b:ids[1],direction:'both',conflict_resolution:'a wins',collections:[],labels:{},_new:true};
   renderPairs();
 }
 
@@ -275,16 +275,19 @@ function renderPairs(){
 
 function renderMap(pid){
   const tb=$('map-'+pid); tb.innerHTML=''; const colls=CFG.pairs[pid].collections||[];
+  const labels=CFG.pairs[pid].labels||{};
   colls.forEach((c,i)=>{ const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${esc(c[0])}</td><td class="uid">${esc(c[1])}</td><td class="uid">${esc(c[2])}</td>
-      <td><button class="btn small danger" onclick="delMap('${pid}',${i})">×</button></td>`; tb.appendChild(tr); });
+    const lbl=labels[c[0]];
+    tr.innerHTML=`<td>${esc(c[0])}${lbl?' <span class="muted">('+esc(lbl)+')</span>':''}</td>`+
+      `<td class="uid">${esc(c[1])}</td><td class="uid">${esc(c[2])}</td>`+
+      `<td><button class="btn small danger" onclick="delMap('${pid}',${i})">×</button></td>`; tb.appendChild(tr); });
   if(!colls.length) tb.innerHTML='<tr><td colspan="4" class="muted">No mappings yet.</td></tr>';
 }
 function delMap(pid,i){ CFG.pairs[pid].collections.splice(i,1); renderMap(pid); }
 
 async function savePair(pid){
   const p=CFG.pairs[pid];
-  const payload={name:p.name,service:p.service,a:p.a,b:p.b,direction:p.direction||'both',conflict_resolution:p.conflict_resolution,collections:p.collections};
+  const payload={name:p.name,service:p.service,a:p.a,b:p.b,direction:p.direction||'both',conflict_resolution:p.conflict_resolution,collections:p.collections,labels:p.labels||{}};
   if(!p._new) payload.id=pid;
   try{ const r=await api('/api/pairs',{method:'POST',body:JSON.stringify(payload)});
        CFG=r.config; renderPairs(); toast('Pair saved ✓');
@@ -305,7 +308,7 @@ async function doDiscover(pid){
     // persist the current A/B/type first so discovery matches what's shown
     const p=CFG.pairs[pid];
     await api('/api/pairs',{method:'POST',body:JSON.stringify({id:pid,name:p.name,service:p.service,
-      a:p.a,b:p.b,direction:p.direction||'both',conflict_resolution:p.conflict_resolution,collections:p.collections})});
+      a:p.a,b:p.b,direction:p.direction||'both',conflict_resolution:p.conflict_resolution,collections:p.collections,labels:p.labels||{}})});
     const res=await api('/api/discover',{method:'POST',body:JSON.stringify({pair:pid})});
     discovered[pid]=res;
     note.textContent='';
@@ -352,7 +355,14 @@ function addMap(pid){
   const aid=$('sa-'+pid).value, bid=$('sb-'+pid).value;
   const sn=($('sn-'+pid).value||'').trim()||('map'+(CFG.pairs[pid].collections.length+1));
   if(!aid||!bid){ toast('Select both sides',true); return; }
-  CFG.pairs[pid].collections.push([sn,aid,bid]); $('sn-'+pid).value=''; renderMap(pid);
+  CFG.pairs[pid].collections.push([sn,aid,bid]);
+  // remember the real calendar/address-book name for the activity feed
+  const d=discovered[pid]||{a:{collections:[]},b:{collections:[]}};
+  const an=(d.a.collections.find(x=>x.id===aid)||{}).name;
+  const bn=(d.b.collections.find(x=>x.id===bid)||{}).name;
+  CFG.pairs[pid].labels=CFG.pairs[pid].labels||{};
+  CFG.pairs[pid].labels[sn]=an||bn||sn;
+  $('sn-'+pid).value=''; renderMap(pid);
 }
 
 fillGeneral(); renderAccounts(); renderPairs();

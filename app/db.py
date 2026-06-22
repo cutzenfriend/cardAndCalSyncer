@@ -30,7 +30,10 @@ CREATE TABLE IF NOT EXISTS activities (
     action      TEXT NOT NULL,             -- create | update | delete
     ident       TEXT NOT NULL,
     pair        TEXT,
-    collection  TEXT,
+    collection  TEXT,                       -- mapping short name
+    collection_label TEXT,                  -- real calendar/address-book display name
+    title       TEXT,                       -- event/contact title (best-effort)
+    subtitle    TEXT,                       -- date / extra detail (best-effort)
     src_name    TEXT,                       -- source account (name)
     src_kind    TEXT,                       -- icloud | google | caldav
     dst_name    TEXT,                       -- target account (name)
@@ -52,7 +55,16 @@ class Database:
         self._lock = threading.Lock()
         with self._lock:
             self._conn.executescript(_SCHEMA)
+            self._migrate()
             self._conn.commit()
+
+    def _migrate(self) -> None:
+        """Add columns introduced after the first release to existing DBs."""
+        cur = self._conn.execute("PRAGMA table_info(activities)")
+        cols = {r["name"] for r in cur.fetchall()}
+        for col in ("collection_label", "title", "subtitle"):
+            if col not in cols:
+                self._conn.execute(f"ALTER TABLE activities ADD COLUMN {col} TEXT")
 
     @contextmanager
     def _cursor(self) -> Iterator[sqlite3.Cursor]:
@@ -89,11 +101,13 @@ class Database:
         with self._cursor() as cur:
             cur.execute(
                 "INSERT INTO activities (run_id, ts, action, ident, pair, collection, "
-                "src_name, src_kind, dst_name, dst_kind) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "collection_label, title, subtitle, src_name, src_kind, dst_name, dst_kind) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     run_id, ts, act["action"], act["ident"], act.get("pair"),
-                    act.get("collection"), act.get("src_name"), act.get("src_kind"),
+                    act.get("collection"), act.get("collection_label"),
+                    act.get("title"), act.get("subtitle"),
+                    act.get("src_name"), act.get("src_kind"),
                     act.get("dst_name"), act.get("dst_kind"),
                 ),
             )
