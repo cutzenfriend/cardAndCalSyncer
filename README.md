@@ -11,7 +11,7 @@ parses its output into a SQLite DB and shows everything in the browser.
 
 ## Features
 
-- **Bidirectional**, any number of calendars/address books, mappable in the UI
+- **Bidirectional or one-way** per pair (A→B / B→A, where the source side is kept read-only), any number of calendars/address books, mappable in the UI
 - Supported providers:
   - **iCloud** (CalDAV/CardDAV, app-specific password → full write access)
   - **Google** (Google's CalDAV & CardDAV APIs, OAuth2)

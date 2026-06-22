@@ -227,7 +227,7 @@ function addPair(){
   const ids=Object.keys(CFG.accounts);
   if(ids.length<2){ toast('Add at least two accounts first',true); return; }
   const pid='new_'+Math.random().toString(36).slice(2,8);
-  CFG.pairs[pid]={name:'New pair',service:'calendar',a:ids[0],b:ids[1],conflict_resolution:'a wins',collections:[],_new:true};
+  CFG.pairs[pid]={name:'New pair',service:'calendar',a:ids[0],b:ids[1],direction:'both',conflict_resolution:'a wins',collections:[],_new:true};
   renderPairs();
 }
 
@@ -246,10 +246,17 @@ function renderPairs(){
           <option value="contacts" ${p.service==='contacts'?'selected':''}>Contacts</option></select></label>
         <label>Side A<select data-p="a">${accountOptions(p.a)}</select></label>
         <label>Side B<select data-p="b">${accountOptions(p.b)}</select></label>
+        <label>Direction<select data-p="direction">
+          <option value="both" ${(p.direction||'both')==='both'?'selected':''}>Bidirectional (both ways)</option>
+          <option value="a_to_b" ${p.direction==='a_to_b'?'selected':''}>A → B (A is source, B is updated)</option>
+          <option value="b_to_a" ${p.direction==='b_to_a'?'selected':''}>B → A (B is source, A is updated)</option></select></label>
         <label>Conflict resolution<select data-p="conflict_resolution">
           <option value="a wins" ${p.conflict_resolution==='a wins'?'selected':''}>A wins</option>
           <option value="b wins" ${p.conflict_resolution==='b wins'?'selected':''}>B wins</option></select></label>
       </div>
+      <p class="hint">One-way means the source side is treated read-only — it's never
+      modified, only the other side is updated to match. Conflict resolution only
+      applies to bidirectional pairs.</p>
       <h3>Mappings</h3>
       <table class="tbl"><thead><tr><th>Short name</th><th>A</th><th>B</th><th></th></tr></thead>
         <tbody id="map-${pid}"></tbody></table>
@@ -277,7 +284,7 @@ function delMap(pid,i){ CFG.pairs[pid].collections.splice(i,1); renderMap(pid); 
 
 async function savePair(pid){
   const p=CFG.pairs[pid];
-  const payload={name:p.name,service:p.service,a:p.a,b:p.b,conflict_resolution:p.conflict_resolution,collections:p.collections};
+  const payload={name:p.name,service:p.service,a:p.a,b:p.b,direction:p.direction||'both',conflict_resolution:p.conflict_resolution,collections:p.collections};
   if(!p._new) payload.id=pid;
   try{ const r=await api('/api/pairs',{method:'POST',body:JSON.stringify(payload)});
        CFG=r.config; renderPairs(); toast('Pair saved ✓');
@@ -298,7 +305,7 @@ async function doDiscover(pid){
     // persist the current A/B/type first so discovery matches what's shown
     const p=CFG.pairs[pid];
     await api('/api/pairs',{method:'POST',body:JSON.stringify({id:pid,name:p.name,service:p.service,
-      a:p.a,b:p.b,conflict_resolution:p.conflict_resolution,collections:p.collections})});
+      a:p.a,b:p.b,direction:p.direction||'both',conflict_resolution:p.conflict_resolution,collections:p.collections})});
     const res=await api('/api/discover',{method:'POST',body:JSON.stringify({pair:pid})});
     discovered[pid]=res;
     note.textContent='';

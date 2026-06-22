@@ -450,12 +450,16 @@ async def api_save_pair(request: Request, _: str = Depends(require_api)):
         raise HTTPException(400, "Unknown account")
     if a == b:
         raise HTTPException(400, "A and B must be different")
+    direction = body.get("direction", "both")
+    if direction not in ("both", "a_to_b", "b_to_a"):
+        raise HTTPException(400, "Invalid direction")
     pairs = cfg["pairs"]
     pid = body.get("id") or secrets.token_hex(4)
     pairs[pid] = {
         "name": body.get("name") or pid,
         "service": body.get("service", "calendar"),
         "a": a, "b": b,
+        "direction": direction,
         "conflict_resolution": body.get("conflict_resolution", "a wins"),
         "collections": body.get("collections", pairs.get(pid, {}).get("collections", [])),
     }

@@ -29,13 +29,13 @@ def _sec_var(account_id: str, field: str) -> str:
 
 
 def _storage_block(account_id: str, acc: dict[str, Any], service: str,
-                   env: dict[str, str], dry_run: bool = False) -> list[str]:
+                   env: dict[str, str], read_only: bool = False) -> list[str]:
     name = storage_name(account_id, service)
     kind = acc.get("kind", "caldav")
     is_cal = service == "calendar"
     out = [f"[storage {name}]"]
-    if dry_run:
-        out.append("read_only = true")  # dry run: never write to this storage
+    if read_only:
+        out.append("read_only = true")  # one-way sync / dry run: never write here
 
     if kind == "google":
         out.append(f'type = {_val("google_calendar" if is_cal else "google_contacts")}')
@@ -71,17 +71,32 @@ def generate(cfg: dict[str, Any], *, only_pair: str | None = None,
         pairs = {only_pair: pairs[only_pair]}
     accounts = cfg["accounts"]
 
-    # collect the required (account, service) combinations
+    # collect required (account, service) combos and which side is "frozen"
+    # (read-only) per one-way direction. A storage stays writable if ANY pair
+    # writes to it.
     needed: dict[str, tuple[str, str]] = {}  # storage_name -> (account_id, service)
+    frozen: set[str] = set()
+    writable: set[str] = set()
     for p in pairs.values():
         svc = p.get("service", "calendar")
-        for aid in (p["a"], p["b"]):
-            needed[storage_name(aid, svc)] = (aid, svc)
+        sa, sb = storage_name(p["a"], svc), storage_name(p["b"], svc)
+        needed[sa] = (p["a"], svc)
+        needed[sb] = (p["b"], svc)
+        direction = p.get("direction", "both")
+        if direction == "a_to_b":      # A is source -> B written, A frozen
+            frozen.add(sa); writable.add(sb)
+        elif direction == "b_to_a":    # B is source -> A written, B frozen
+            frozen.add(sb); writable.add(sa)
+        else:                          # bidirectional
+            writable.add(sa); writable.add(sb)
+
+    def _is_readonly(sname: str) -> bool:
+        return dry_run or (sname in frozen and sname not in writable)
 
     for sname, (aid, svc) in needed.items():
         acc = accounts.get(aid)
         if acc:
-            lines += _storage_block(aid, acc, svc, env, dry_run=dry_run)
+            lines += _storage_block(aid, acc, svc, env, read_only=_is_readonly(sname))
 
     for pid, p in pairs.items():
         svc = p.get("service", "calendar")
