@@ -26,7 +26,6 @@ SECRET_FIELDS = {"password", "client_secret", "client_id"}
 DEFAULT_CONFIG: dict[str, Any] = {
     "interval_seconds": 300,
     "sync_enabled": True,
-    "dry_run": False,
     "base_url": "",  # optional public URL for OAuth redirects (e.g. https://cacs.example.com)
     "auth": {"username": "", "pw_salt": "", "pw_hash": "", "secret": ""},
     "accounts": {},

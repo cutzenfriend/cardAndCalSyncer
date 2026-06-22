@@ -157,7 +157,6 @@ def _status_payload() -> dict[str, Any]:
     return {
         "busy": runner.busy,
         "sync_enabled": cfg.get("sync_enabled", True),
-        "dry_run": cfg.get("dry_run", False),
         "interval_seconds": cfg.get("interval_seconds", 300),
         "next_run_in": eta,
         "ready": _ready_to_sync(cfg),
@@ -411,7 +410,7 @@ def api_get_config(_: str = Depends(require_api)):
 @app.post("/api/config")
 async def api_save_config(request: Request, _: str = Depends(require_api)):
     body = await request.json()
-    allowed = {k: body[k] for k in ("interval_seconds", "sync_enabled", "dry_run", "base_url", "alerts") if k in body}
+    allowed = {k: body[k] for k in ("interval_seconds", "sync_enabled", "base_url", "alerts") if k in body}
     cfg = store.save(allowed)
     return {"ok": True, "ready": _ready_to_sync(cfg)}
 

@@ -5,7 +5,6 @@ import asyncio
 import logging
 import os
 import re
-import shutil
 from datetime import datetime, timezone
 from typing import Any
 
@@ -21,7 +20,6 @@ log = logging.getLogger("cacs.runner")
 
 CONFIG_FILE = "/config/vdirsyncer.conf"
 DISCOVER_CONF = "/config/.discover.conf"
-DRY_STATUS_DIR = "/data/status_dryrun"
 ROLLING_LOG = "/logs/vdirsyncer.log"
 
 
@@ -144,14 +142,12 @@ class Runner:
         cfg = self.store.get()
         prev = self.db.last_run("sync")
         prev_status = prev["status"] if prev else None
-        dry = bool(cfg.get("dry_run", False))
 
-        trig = f"{trigger}·dry" if dry else trigger
-        run_id = self.db.start_run("sync", pair, trig, _now(), collection=collection)
-        log.info("sync run #%s started (pair=%s, collection=%s, trigger=%s, dry=%s)",
-                 run_id, pair, collection, trigger, dry)
+        run_id = self.db.start_run("sync", pair, trigger, _now(), collection=collection)
+        log.info("sync run #%s started (pair=%s, collection=%s, trigger=%s)",
+                 run_id, pair, collection, trigger)
         try:
-            return await self._do_sync(run_id, cfg, prev_status, pair, dry, collection)
+            return await self._do_sync(run_id, cfg, prev_status, pair, collection)
         except Exception as exc:
             log.exception("sync run #%s aborted", run_id)
             self.db.finish_run(
@@ -165,20 +161,9 @@ class Runner:
                     "errors": [str(exc)], "warnings": []}
 
     async def _do_sync(self, run_id: int, cfg: dict[str, Any], prev_status: str | None,
-                       pair: str | None, dry: bool = False,
-                       collection: str | None = None) -> dict[str, Any]:
-        conf, secret_env = confgen.generate(cfg, only_pair=pair, dry_run=dry)
+                       pair: str | None, collection: str | None = None) -> dict[str, Any]:
+        conf, secret_env = confgen.generate(cfg, only_pair=pair)
         self._write_conf(CONFIG_FILE, conf)
-
-        if dry:
-            # isolated, throwaway status dir so the real sync state is never touched;
-            # discover into it first to populate the collection cache.
-            shutil.rmtree(DRY_STATUS_DIR, ignore_errors=True)
-            os.makedirs(DRY_STATUS_DIR, exist_ok=True)
-            dcmd = ["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE, "discover"]
-            if pair:
-                dcmd.append(pair)
-            await self._exec(dcmd, secret_env, run_id)
 
         cmd = ["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE, "sync"]
         if pair and collection:
@@ -192,7 +177,7 @@ class Runner:
         # vdirsyncer hides the cause behind "Unknown error … use -vdebug" (the
         # traceback is only logged at DEBUG). On failure, retry once at DEBUG
         # (secrets redacted) to capture it into the run log. Counts/status stay
-        # from the first pass. Runs even in dry mode (read-only -> safe).
+        # from the first pass.
         if rc != 0 or parsed.errors:
             dbg = ["vdirsyncer", "-v", "DEBUG", "-c", CONFIG_FILE, "sync"] + cmd[6:]
             _, dlines = await self._exec(dbg, secret_env, run_id)
