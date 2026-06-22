@@ -1,18 +1,18 @@
 services:
   cacs:
-    build: .
-    image: cacs:local
+    image: cutzenfriend/cardandcalsyncer:latest
     container_name: cacs
     restart: unless-stopped
-    env_file: .env
     ports:
       - "8080:8080"          # Web UI:  http://<host>:8080
     environment:
-      SYNC_INTERVAL: "300"   # default interval (changeable in the UI)
-      LOG_LEVEL: "INFO"
+      SYNC_INTERVAL: "300"   # default sync interval in seconds (changeable in the UI)
+      LOG_LEVEL: "INFO"      # INFO or DEBUG
       # Optional admin bootstrap (otherwise first-time setup in the browser at /setup):
-      ADMIN_USERNAME: "${ADMIN_USERNAME:-}"
-      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      # ADMIN_USERNAME: "admin"
+      # ADMIN_PASSWORD: "change-me"
+      # Optional alerts — comma-separated Apprise URLs:
+      # APPRISE_URLS: "ntfy://ntfy.sh/my-topic,mailto://..."
     volumes:
       # Bind mounts (no named volumes):
       - /opt/docker-volumes/cacs/config:/config   # generated vdirsyncer.conf

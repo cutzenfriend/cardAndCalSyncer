@@ -24,35 +24,43 @@ parses its output into a SQLite DB and shows everything in the browser.
 
 ## Quick start
 
-```sh
-git clone https://github.com/cutzenfriend/cardAndCalSyncer.git
-cd cardAndCalSyncer
-cp .env.example .env            # optional; everything also works in the UI
+The image is published on Docker Hub as
+[`cutzenfriend/cardandcalsyncer`](https://hub.docker.com/r/cutzenfriend/cardandcalsyncer).
+No `.env` file is needed — all settings live directly in the compose file.
 
+```sh
+# grab the compose file
+curl -O https://raw.githubusercontent.com/cutzenfriend/cardAndCalSyncer/main/docker-compose.yml
+
+# create the bind-mount directories (container runs as uid 1000)
 sudo mkdir -p /opt/docker-volumes/cacs/{config,data,logs}
 sudo chown -R 1000:1000 /opt/docker-volumes/cacs
 
-docker compose up -d --build
+docker compose up -d
 ```
 
 Then open **http://<host>:8080** → create an admin account during first-time
 setup → add accounts → create pairs → "Load collections" → map them →
 "Save pair". Done.
 
-### Example `docker-compose.yml`
+### `docker-compose.yml`
 
 ```yaml
 services:
   cacs:
-    image: cacs:local
-    build: .
+    image: cutzenfriend/cardandcalsyncer:latest
     container_name: cacs
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       SYNC_INTERVAL: "300"        # seconds, changeable in the UI
-      # ADMIN_USERNAME / ADMIN_PASSWORD optional for a headless bootstrap
+      LOG_LEVEL: "INFO"
+      # Optional admin bootstrap (otherwise first-time setup at /setup):
+      # ADMIN_USERNAME: "admin"
+      # ADMIN_PASSWORD: "change-me"
+      # Optional alerts (comma-separated Apprise URLs):
+      # APPRISE_URLS: "ntfy://ntfy.sh/my-topic"
     volumes:
       - /opt/docker-volumes/cacs/config:/config
       - /opt/docker-volumes/cacs/data:/data
@@ -63,6 +71,8 @@ services:
       timeout: 5s
       retries: 3
 ```
+
+To update: `docker compose pull && docker compose up -d`.
 
 ## Setting up providers
 
@@ -103,6 +113,8 @@ services:
 
 ## Environment variables
 
+Set these in the `environment:` block of your compose file (all optional):
+
 | Variable | Purpose |
 |---|---|
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | optional admin bootstrap (otherwise `/setup`) |
@@ -120,6 +132,23 @@ services:
 │   └─ SQLite (runs/activity) ◀─ log parser ─ generated vdirsyncer.conf     │
 └───────────────────────────────────────────────────────────────────────────┘
    /config  generated conf      /data  DB · config · OAuth tokens · status     /logs
+```
+
+## Build from source
+
+```sh
+git clone https://github.com/cutzenfriend/cardAndCalSyncer.git
+cd cardAndCalSyncer
+docker build -t cutzenfriend/cardandcalsyncer:latest .
+# maintainer: publish to Docker Hub
+docker push cutzenfriend/cardandcalsyncer:latest
+```
+
+A multi-arch build (amd64/arm64):
+
+```sh
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t cutzenfriend/cardandcalsyncer:latest --push .
 ```
 
 ## License
