@@ -87,3 +87,25 @@ class Auth:
         if u != self.store.get()["auth"].get("username"):
             return None
         return u
+
+    # --- generic signed blobs (e.g. OAuth state) ---------------------------
+    def sign(self, payload: dict[str, Any]) -> str:
+        raw = _b64e(json.dumps({**payload, "iat": int(time.time())},
+                               separators=(",", ":")).encode())
+        sig = hmac.new(self._secret(), raw.encode(), hashlib.sha256).digest()
+        return f"{raw}.{_b64e(sig)}"
+
+    def unsign(self, token: str | None, max_age: int = 600) -> dict[str, Any] | None:
+        if not token or "." not in token:
+            return None
+        raw, _, sig = token.partition(".")
+        expected = hmac.new(self._secret(), raw.encode(), hashlib.sha256).digest()
+        try:
+            if not hmac.compare_digest(_b64d(sig), expected):
+                return None
+            data: dict[str, Any] = json.loads(_b64d(raw))
+        except Exception:
+            return None
+        if int(time.time()) - int(data.get("iat", 0)) > max_age:
+            return None
+        return data

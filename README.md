@@ -80,15 +80,29 @@ To update: `docker compose pull && docker compose up -d`.
 | Provider | What you need |
 |---|---|
 | **iCloud** | Apple ID + **app-specific password** (appleid.apple.com → Sign-In & Security; 2FA required) |
-| **Google** | OAuth client of type **"Desktop"** from the Google Cloud Console; enable the "Calendar" and "People" APIs. Authorize OAuth once (see below) |
+| **Google** | OAuth client of type **"Web application"** from the Google Cloud Console; paste Client ID + secret, then click **"Connect Google"** — one browser consent, no CLI (see below) |
 | **Microsoft/Outlook** | Only if the account allows CalDAV/CardDAV — server URL + credentials. **Microsoft 365 / Graph is not supported** (vdirsyncer doesn't speak Graph) |
 | **CalDAV/CardDAV** (Nextcloud, Fastmail, your own server) | Server URL(s) + username/password (app password if applicable) |
 
-> **Google OAuth (one-time):** the flow expects a `localhost` redirect, which is
-> awkward headless inside a container. Easiest path: authorize vdirsyncer once on
-> a desktop with a browser (`pipx install "vdirsyncer[google]"`, same client ID),
-> then copy the generated token into `/opt/docker-volumes/cacs/data/`
-> (as `acc_<id>_cal.token` / `acc_<id>_card.token`, owner uid 1000).
+### Connecting Google (one click)
+
+1. In the [Google Cloud Console](https://console.cloud.google.com) create an
+   OAuth client of type **Web application**.
+2. Add an **Authorized redirect URI** — CaCs shows the exact value to use in the
+   account dialog. It is `<base-url>/oauth/google/callback`.
+3. In CaCs: add a Google account, paste **Client ID** + **Client secret**, save,
+   reopen it and click **Connect Google**. Approve the consent screen — done.
+   CaCs stores the token itself; no CLI, no copying files.
+
+> **Redirect URI rule (Google):** Google only accepts redirect URIs that are
+> `https://…` or `http://localhost` / `http://127.0.0.1`. So:
+> - Browsing CaCs at `http://localhost:8080` → works out of the box.
+> - Behind a reverse proxy with HTTPS → set **Public base URL** in
+>   *Configuration → General* to your `https://…` address.
+> - Plain-HTTP on a LAN IP (e.g. `http://192.168.x.x:8080`) is rejected by
+>   Google — connect once via an SSH tunnel to `localhost`, or put CaCs behind HTTPS.
+>
+> The token is refreshed automatically afterwards, so this is a one-time step.
 
 ## Interface
 

@@ -15,6 +15,10 @@
   nothing is written to your calendars/contacts. Useful to validate credentials and
   mappings before going live. Note: it confirms connectivity and makes zero changes,
   but cannot list the individual would-be changes (vdirsyncer has no diff preview).</p>
+  <label style="margin-top:10px">Public base URL (optional, for Google "Connect")
+    <input type="text" id="baseurl" placeholder="https://cacs.example.com"></label>
+  <p class="hint">Only needed behind a reverse proxy. Leave empty to use the address you're
+  browsing. Google requires <code>https://…</code> or <code>http://localhost</code> redirect URIs.</p>
   <h3>Notifications (Apprise)</h3>
   <p class="hint">One URL per line (<code>mailto://…</code>, <code>tgram://…</code>, <code>ntfy://…</code>)</p>
   <textarea id="apprise" rows="2"></textarea>
@@ -55,7 +59,7 @@ const PRESETS = {
   icloud:    {kind:'icloud', label:'iCloud', fields:['username','password'],
               help:'App-specific password from appleid.apple.com (not your normal password).'},
   google:    {kind:'google', label:'Google', fields:['client_id','client_secret'],
-              help:'OAuth "Desktop" client (Calendar API + People API). Authorize OAuth once — see README.'},
+              help:'OAuth client of type "Web application". Save, then click "Connect Google" below — one consent, no CLI.'},
   microsoft: {kind:'caldav', label:'Microsoft/Outlook', fields:['username','password','cal_url','card_url'],
               cal_url:'https://outlook.office365.com/', card_url:'',
               help:'⚠️ Works only if the account allows CalDAV/CardDAV. Microsoft 365/Graph is NOT supported by vdirsyncer.'},
@@ -80,17 +84,18 @@ async function api(p,o){const r=await fetch(p,Object.assign({headers:{'Content-T
 
 function fillGeneral(){
   $('interval').value=CFG.interval_seconds; $('enabled').checked=CFG.sync_enabled;
-  $('dryrun').checked=CFG.dry_run;
+  $('dryrun').checked=CFG.dry_run; $('baseurl').value=CFG.base_url||'';
   $('apprise').value=(CFG.alerts.apprise_urls||[]).join('\n');
   $('al_fail').checked=CFG.alerts.on_failure; $('al_rec').checked=CFG.alerts.on_recovery;
 }
 async function saveGeneral(){
   CFG.interval_seconds=parseInt($('interval').value)||300; CFG.sync_enabled=$('enabled').checked;
-  CFG.dry_run=$('dryrun').checked;
+  CFG.dry_run=$('dryrun').checked; CFG.base_url=$('baseurl').value.trim();
   CFG.alerts={apprise_urls:$('apprise').value.split('\n').map(s=>s.trim()).filter(Boolean),
               on_failure:$('al_fail').checked, on_recovery:$('al_rec').checked};
   try{ await api('/api/config',{method:'POST',body:JSON.stringify(
-        {interval_seconds:CFG.interval_seconds,sync_enabled:CFG.sync_enabled,dry_run:CFG.dry_run,alerts:CFG.alerts})});
+        {interval_seconds:CFG.interval_seconds,sync_enabled:CFG.sync_enabled,dry_run:CFG.dry_run,
+         base_url:CFG.base_url,alerts:CFG.alerts})});
        $('genmsg').textContent='saved ✓'; }catch(e){ $('genmsg').textContent=e.message; }
 }
 
@@ -127,18 +132,37 @@ function accountForm(id, presetKey){
     return `<label>${FIELD_LABEL[f]||f}
       <input data-f="${f}" type="${isSec?'password':'text'}" value="${val}" placeholder="${esc(ph)}"></label>`;
   }).join('');
+  // Google-specific connect block
+  let gblock = '';
+  if(kind==='google'){
+    const redir = ((CFG.base_url||location.origin).replace(/\/+$/,'')) + '/oauth/google/callback';
+    if(id){
+      gblock = `<div class="connect">
+        <p class="hint">In your Google Cloud OAuth client (type <b>Web application</b>), add this
+        <b>Authorized redirect URI</b>:<br><code>${esc(redir)}</code></p>
+        <div class="row gap">
+          <button class="btn primary" id="acc-connect">Connect Google</button>
+          <span class="${a.google_connected?'side google':'muted'}">${a.google_connected?'✓ connected':'not connected'}</span>
+        </div>
+        <p class="hint">Saves the account, then opens Google's consent screen once.</p></div>`;
+    } else {
+      gblock = `<p class="hint">Save this account first, then reopen it to connect Google.</p>`;
+    }
+  }
+
   const dlg=document.createElement('div'); dlg.className='overlay';
   dlg.innerHTML=`<div class="dialog"><h2>${id?'Edit account':'Add '+preset.label}</h2>
     <p class="hint">${esc(preset.help||'')}</p>
     <label>Display name<input id="acc-name" value="${esc(a.name||preset.label)}"></label>
     <div class="grid2">${fields}</div>
+    ${gblock}
     <div class="row gap" style="margin-top:12px">
       <button class="btn primary" id="acc-save">Save</button>
       <button class="btn" id="acc-cancel">Cancel</button>
       <span class="err" id="acc-msg"></span></div></div>`;
   document.body.appendChild(dlg);
-  dlg.querySelector('#acc-cancel').onclick=()=>dlg.remove();
-  dlg.querySelector('#acc-save').onclick=async()=>{
+
+  function buildPayload(){
     const payload={kind, name:dlg.querySelector('#acc-name').value};
     if(id) payload.id=id;
     dlg.querySelectorAll('[data-f]').forEach(inp=>{
@@ -147,9 +171,22 @@ function accountForm(id, presetKey){
       else if(isSec && id && a[f]==='__SET__'){ payload[f]='__SET__'; }
       else { payload[f]=''; }
     });
-    try{ const r=await api('/api/accounts',{method:'POST',body:JSON.stringify(payload)});
-         CFG=r.config; dlg.remove(); renderAccounts(); renderPairs(); toast('Account saved');
-    }catch(e){ dlg.querySelector('#acc-msg').textContent=e.message; }
+    return payload;
+  }
+  async function save(){
+    const r=await api('/api/accounts',{method:'POST',body:JSON.stringify(buildPayload())});
+    CFG=r.config; return r.id;
+  }
+
+  dlg.querySelector('#acc-cancel').onclick=()=>dlg.remove();
+  dlg.querySelector('#acc-save').onclick=async()=>{
+    try{ await save(); dlg.remove(); renderAccounts(); renderPairs(); toast('Account saved'); }
+    catch(e){ dlg.querySelector('#acc-msg').textContent=e.message; }
+  };
+  const connectBtn=dlg.querySelector('#acc-connect');
+  if(connectBtn) connectBtn.onclick=async()=>{
+    try{ const savedId=await save(); window.location='/oauth/google/start?account='+encodeURIComponent(savedId); }
+    catch(e){ dlg.querySelector('#acc-msg').textContent=e.message; }
   };
 }
 
@@ -262,5 +299,11 @@ function addMap(pid){
 }
 
 fillGeneral(); renderAccounts(); renderPairs();
+
+// feedback after returning from Google's consent screen
+const qs=new URLSearchParams(location.search);
+if(qs.get('google')==='connected'){ toast('Google connected ✓'); }
+else if(qs.get('google')==='error'){ toast('Google connect failed: '+(qs.get('msg')||''), true); }
+if(qs.has('google')){ history.replaceState({}, '', '/config'); }
 </script>
 {% endblock %}

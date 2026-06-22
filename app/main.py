@@ -2,12 +2,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import secrets
 import time
+import urllib.parse
+import urllib.request
 from contextlib import asynccontextmanager
 from typing import Any
+
+import confgen
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import (HTMLResponse, JSONResponse, PlainTextResponse,
@@ -21,6 +26,11 @@ from runner import ROLLING_LOG, Runner
 from store import ConfigStore
 
 APP_NAME = "CaCs"
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+# vdirsyncer uses CalDAV (calendar scope) and CardDAV (carddav scope) for Google.
+GOOGLE_SCOPES = ("https://www.googleapis.com/auth/calendar "
+                 "https://www.googleapis.com/auth/carddav")
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("cacs")
@@ -201,6 +211,92 @@ def logout():
     return resp
 
 
+# --- Google OAuth (in-app, one click) --------------------------------------
+def _google_redirect_uri(request: Request) -> str:
+    base = (store.get().get("base_url") or "").rstrip("/")
+    if not base:
+        base = str(request.base_url).rstrip("/")
+    return base + "/oauth/google/callback"
+
+
+def _write_google_token(acc_id: str, token: dict[str, Any]) -> None:
+    """Write a vdirsyncer-compatible token file for both calendar and contacts."""
+    os.makedirs(confgen.TOKEN_DIR, exist_ok=True)
+    blob = {
+        "access_token": token.get("access_token"),
+        "token_type": token.get("token_type", "Bearer"),
+        "refresh_token": token.get("refresh_token"),
+        "scope": token["scope"].split() if isinstance(token.get("scope"), str)
+        else token.get("scope"),
+        "expires_in": token.get("expires_in"),
+        "expires_at": time.time() + float(token.get("expires_in", 3600)),
+    }
+    for svc in ("cal", "card"):
+        path = os.path.join(confgen.TOKEN_DIR, f"acc_{acc_id}_{svc}.token")
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(blob, f)
+        os.replace(tmp, path)
+
+
+@app.get("/oauth/google/start")
+def google_oauth_start(account: str, request: Request, _: str = Depends(require_page)):
+    acc = store.account(account)
+    if not acc or acc.get("kind") != "google":
+        raise HTTPException(400, "Unknown Google account")
+    if not acc.get("client_id") or not acc.get("client_secret"):
+        raise HTTPException(400, "Set Client ID and Client secret first")
+    params = urllib.parse.urlencode({
+        "client_id": acc["client_id"],
+        "redirect_uri": _google_redirect_uri(request),
+        "response_type": "code",
+        "scope": GOOGLE_SCOPES,
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": auth.sign({"acc": account}),
+    })
+    return RedirectResponse(f"{GOOGLE_AUTH_URL}?{params}", status_code=303)
+
+
+@app.get("/oauth/google/callback")
+def google_oauth_callback(request: Request, _: str = Depends(require_page),
+                          code: str | None = None, state: str | None = None,
+                          error: str | None = None):
+    if error:
+        return RedirectResponse(f"/config?google=error&msg={urllib.parse.quote(error)}", status_code=303)
+    data = auth.unsign(state)
+    if not data or "acc" not in data or not code:
+        return RedirectResponse("/config?google=error&msg=invalid_state", status_code=303)
+    acc_id = data["acc"]
+    acc = store.account(acc_id)
+    if not acc or acc.get("kind") != "google":
+        return RedirectResponse("/config?google=error&msg=unknown_account", status_code=303)
+    try:
+        body = urllib.parse.urlencode({
+            "code": code,
+            "client_id": acc["client_id"],
+            "client_secret": acc["client_secret"],
+            "redirect_uri": _google_redirect_uri(request),
+            "grant_type": "authorization_code",
+        }).encode()
+        req = urllib.request.Request(
+            GOOGLE_TOKEN_URL, data=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            token = json.load(r)
+        if not token.get("refresh_token"):
+            return RedirectResponse("/config?google=error&msg=no_refresh_token", status_code=303)
+        _write_google_token(acc_id, token)
+        accounts = store.get()["accounts"]
+        accounts[acc_id]["google_connected"] = True
+        store.replace("accounts", accounts)
+        log.info("Google account %s connected", acc_id)
+    except Exception as exc:
+        log.exception("Google OAuth exchange failed")
+        return RedirectResponse(f"/config?google=error&msg={urllib.parse.quote(str(exc)[:120])}", status_code=303)
+    return RedirectResponse("/config?google=connected", status_code=303)
+
+
 # --- HTML pages ------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, _: str = Depends(require_page)):
@@ -261,7 +357,7 @@ def api_get_config(_: str = Depends(require_api)):
 @app.post("/api/config")
 async def api_save_config(request: Request, _: str = Depends(require_api)):
     body = await request.json()
-    allowed = {k: body[k] for k in ("interval_seconds", "sync_enabled", "dry_run", "alerts") if k in body}
+    allowed = {k: body[k] for k in ("interval_seconds", "sync_enabled", "dry_run", "base_url", "alerts") if k in body}
     cfg = store.save(allowed)
     return {"ok": True, "ready": _ready_to_sync(cfg)}
 
