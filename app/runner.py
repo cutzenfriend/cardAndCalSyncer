@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import shutil
 from datetime import datetime, timezone
 from typing import Any
@@ -26,6 +27,23 @@ def _now() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
+_REDACT = [
+    re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]+"),
+    re.compile(r"(?i)(authorization\s*:\s*)\S+"),
+    re.compile(r'(?i)("?(?:access_token|refresh_token|client_secret|client_id|password)"?\s*[:=]\s*)"?[^"&,\s]+'),
+    re.compile(r"(?i)([?&](?:access_token|refresh_token|code|client_secret|client_id)=)[^&\s]+"),
+]
+
+
+def _redact(line: str) -> str:
+    """Strip secrets (bearer tokens, OAuth fields) before logging/showing."""
+    line = _REDACT[0].sub("Bearer «redacted»", line)
+    line = _REDACT[1].sub(r"\1«redacted»", line)
+    line = _REDACT[2].sub(r"\1«redacted»", line)
+    line = _REDACT[3].sub(r"\1«redacted»", line)
+    return line
+
+
 class Runner:
     def __init__(self, db: Database, store: ConfigStore):
         self.db = db
@@ -39,6 +57,10 @@ class Runner:
         env = dict(os.environ)
         env.update(secret_env)
         env.setdefault("HOME", "/data")
+        # Google returns the full granted scope on refresh while vdirsyncer's
+        # per-storage session requests a single scope; relax oauthlib's scope
+        # check so the refresh doesn't raise "Scope has changed".
+        env["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
         lines: list[str] = []
         os.makedirs(os.path.dirname(ROLLING_LOG), exist_ok=True)
         with open(ROLLING_LOG, "a", encoding="utf-8") as rl:
@@ -54,7 +76,7 @@ class Runner:
             async def _drain() -> None:
                 assert proc.stdout is not None
                 async for raw in proc.stdout:
-                    line = raw.decode("utf-8", "replace").rstrip("\n")
+                    line = _redact(raw.decode("utf-8", "replace").rstrip("\n"))
                     lines.append(line)
                     rl.write(f"{_now()} {line}\n")
                 await proc.wait()
@@ -251,6 +273,16 @@ class Runner:
         sa, sb = self.store.pair_storages(p)
         discovered = parser.parse_discover_output(lines, {sa, sb})
         diag = parser.parse_sync_output(lines)  # reuse error/warning classifier
+        log_tail = "\n".join(lines[-30:])
+
+        # If a side failed to discover, retry once at DEBUG (secrets redacted)
+        # to capture the real traceback for the details panel.
+        if list_all and (not discovered.get(sa) or not discovered.get(sb)):
+            dbg = ["vdirsyncer", "-v", "DEBUG", "-c", DISCOVER_CONF, "discover", "--list", pair]
+            _, dlines = await self._exec(dbg, secret_env, run_id)
+            log_tail = "\n".join(dlines[-80:])
+            if not diag.errors:
+                diag = parser.parse_sync_output(dlines)
 
         # list-all prints the data before any possible abort -> consider it a
         # success as soon as at least one side was found.
@@ -270,6 +302,6 @@ class Runner:
             "a": _side(p["a"], colls_for(sa)),
             "b": _side(p["b"], colls_for(sb)),
             "errors": diag.errors, "warnings": diag.warnings,
-            "log_tail": "\n".join(lines[-30:]),
+            "log_tail": log_tail,
         }
         return out
