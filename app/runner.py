@@ -189,6 +189,14 @@ class Runner:
         rc, lines = await self._exec(cmd, secret_env, run_id)
         parsed = parser.parse_sync_output(lines)
 
+        # vdirsyncer hides the cause behind "Unknown error … use -vdebug". On
+        # failure, retry once at DEBUG (secrets redacted) to capture the traceback
+        # into the run log. Counts/status stay from the first pass.
+        if not dry and (rc != 0 or parsed.errors):
+            dbg = ["vdirsyncer", "-v", "DEBUG", "-c", CONFIG_FILE, "sync"] + cmd[6:]
+            _, dlines = await self._exec(dbg, secret_env, run_id)
+            lines = lines + ["", "----- DEBUG retry (redacted) -----"] + dlines
+
         enrich_items: list[dict[str, Any]] = []
         for act in parsed.activities:
             info = self.store.resolve_dest(act.dest_storage, act.collection) or {}
