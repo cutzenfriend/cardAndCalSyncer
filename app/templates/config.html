@@ -334,6 +334,14 @@ async function doDiscover(pid){
       const pre=document.createElement('pre'); pre.className='logbox'; pre.textContent=body; det.appendChild(pre);
       note.appendChild(det);
     }
+    // backfill real names for mappings that already exist
+    const labels=CFG.pairs[pid].labels=CFG.pairs[pid].labels||{};
+    (CFG.pairs[pid].collections||[]).forEach(c=>{
+      const an=(res.a.collections.find(x=>x.id===c[1])||{}).name;
+      const bn=(res.b.collections.find(x=>x.id===c[2])||{}).name;
+      if(an||bn) labels[c[0]]=an||bn;
+    });
+    renderMap(pid);
     renderBuilder(pid,res);
   }catch(e){ note.textContent='Error: '+e.message; }
 }
