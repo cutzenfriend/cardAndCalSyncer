@@ -12,6 +12,7 @@ import alerts
 import clear as clear_mod
 import confgen
 import enrich
+import fixuids
 import parser
 from db import Database
 from store import ConfigStore
@@ -270,6 +271,37 @@ class Runner:
                     self.db.finish_run(run_id, status="failed", finished_at=_now(), rc=-1,
                                        n_create=0, n_update=0, n_delete=0, n_errors=1,
                                        log=f"Clear failed: {exc}")
+                raise
+            finally:
+                self.busy = False
+
+    # --- fix long UIDs (rewrites items) ------------------------------------
+    async def fix_uids(self, pair: str, side: str, collection: str | None,
+                       threshold: int, execute: bool) -> dict[str, Any]:
+        async with self._lock:
+            self.busy = True
+            run_id = None
+            try:
+                if execute:
+                    run_id = self.db.start_run("repair", pair, "manual", _now(),
+                                               collection=collection)
+                res = await fixuids.run_fix(self.store, pair, side, collection,
+                                            threshold, execute)
+                if run_id is not None:
+                    self.db.finish_run(
+                        run_id, status="failed" if res["errors"] else "success",
+                        finished_at=_now(), rc=0, n_create=0, n_update=res["fixed"],
+                        n_delete=0, n_errors=len(res["errors"]),
+                        log=(f"Rewrote {res['fixed']} over-long UID(s) on "
+                             f"{res['account']} (>{res['threshold']} chars).\n"
+                             + "\n".join(res["errors"])))
+                    res["run_id"] = run_id
+                return res
+            except Exception as exc:
+                if run_id is not None:
+                    self.db.finish_run(run_id, status="failed", finished_at=_now(), rc=-1,
+                                       n_create=0, n_update=0, n_delete=0, n_errors=1,
+                                       log=f"Fix UIDs failed: {exc}")
                 raise
             finally:
                 self.busy = False

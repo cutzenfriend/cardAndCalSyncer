@@ -518,6 +518,36 @@ async def api_clear(request: Request, _: str = Depends(require_api)):
     return await _do_clear(request, execute=True)
 
 
+# --- API: fix over-long UIDs (rewrites items) ------------------------------
+async def _do_fix(request: Request, execute: bool) -> dict[str, Any]:
+    body = await request.json()
+    pair, side = body.get("pair"), body.get("side")
+    collection = body.get("collection") or None
+    threshold = int(body.get("threshold") or 0)
+    if pair not in store.get()["pairs"]:
+        raise HTTPException(400, "Unknown pair")
+    if side not in ("a", "b"):
+        raise HTTPException(400, "Invalid side")
+    if runner.busy:
+        raise HTTPException(409, "Another operation is running")
+    try:
+        return await runner.fix_uids(pair, side, collection, threshold, execute=execute)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Fix UIDs failed: {exc}")
+
+
+@app.post("/api/repair/preview")
+async def api_repair_preview(request: Request, _: str = Depends(require_api)):
+    return await _do_fix(request, execute=False)
+
+
+@app.post("/api/repair")
+async def api_repair(request: Request, _: str = Depends(require_api)):
+    return await _do_fix(request, execute=True)
+
+
 # --- API: actions -----------------------------------------------------------
 @app.post("/api/discover")
 async def api_discover(request: Request, _: str = Depends(require_api)):

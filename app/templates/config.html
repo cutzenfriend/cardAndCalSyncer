@@ -261,6 +261,7 @@ function renderPairs(){
         <button class="btn primary" onclick="syncPair('${pid}')">Sync pair</button>
         <button class="btn small" onclick="clearDialog('${pid}','a')">Clear A…</button>
         <button class="btn small" onclick="clearDialog('${pid}','b')">Clear B…</button>
+        <button class="btn small" onclick="fixDialog('${pid}')">Fix UIDs…</button>
         <button class="btn small danger" onclick="delPair('${pid}')">Delete pair</button>
         <span class="muted" id="disc-${pid}"></span>
       </div>
@@ -359,6 +360,59 @@ function clearDialog(pid, side){
       const r=await api('/api/clear',{method:'POST',body:JSON.stringify({pair:pid,side,months:months(),collection:coll()})});
       toast('Deleted '+r.deleted+' item(s) from '+r.account);
       dlg.remove();
+    }catch(e){ msg.textContent='Error: '+e.message; }
+  };
+}
+
+function fixDialog(pid){
+  const p=CFG.pairs[pid];
+  if(p._new){ toast('Save the pair first',true); return; }
+  const what=p.service==='calendar'?'calendars':'address books';
+  const accName=id=>(CFG.accounts[id]||{}).name||id;
+  const collOptions=(p.collections||[]).map(c=>`<option value="${esc(c[0])}">${esc((p.labels||{})[c[0]]||c[0])}</option>`).join('')
+    + `<option value="">— All mapped ${what} —</option>`;
+  const dlg=document.createElement('div'); dlg.className='overlay';
+  dlg.innerHTML=`<div class="dialog">
+    <h2>Fix over-long UIDs</h2>
+    <div class="note warn">Rewrites items whose UID is longer than the limit to a short, safe UID
+      (e.g. 64-char Outlook UIDs that iCloud rejects with “Not Found”). The item keeps its content
+      but gets a new identity on the chosen side. Run it on the side that holds the bad items
+      (usually the source), then sync.</div>
+    <div class="grid2">
+      <label>Side<select id="fix-side">
+        <option value="a">A — ${esc(accName(p.a))}</option>
+        <option value="b">B — ${esc(accName(p.b))}</option></select></label>
+      <label>${p.service==='calendar'?'Calendar':'Address book'}<select id="fix-coll">${collOptions}</select></label>
+      <label>Rewrite UIDs longer than (chars)<input id="fix-th" type="number" min="20" value="50"></label>
+    </div>
+    <div class="row gap" style="margin-top:12px">
+      <button class="btn" id="fix-preview">Preview</button>
+      <button class="btn danger" id="fix-confirm" disabled>Fix</button>
+      <button class="btn" id="fix-cancel">Cancel</button>
+    </div>
+    <p id="fix-msg" class="hint"></p></div>`;
+  document.body.appendChild(dlg);
+  const body=()=>({pair:pid, side:dlg.querySelector('#fix-side').value,
+    collection:dlg.querySelector('#fix-coll').value, threshold:parseInt(dlg.querySelector('#fix-th').value)||50});
+  const msg=dlg.querySelector('#fix-msg'), confirmBtn=dlg.querySelector('#fix-confirm');
+  ['#fix-side','#fix-coll','#fix-th'].forEach(s=>{ const el=dlg.querySelector(s);
+    if(el) el.onchange=()=>{ confirmBtn.disabled=true; msg.textContent='Preview again after changing this.'; }; });
+  dlg.querySelector('#fix-cancel').onclick=()=>dlg.remove();
+  dlg.querySelector('#fix-preview').onclick=async()=>{
+    msg.textContent='checking… (reads every item, can take a while)'; confirmBtn.disabled=true;
+    try{
+      const r=await api('/api/repair/preview',{method:'POST',body:JSON.stringify(body())});
+      let t=`${r.count} item(s) on ${r.account} have UIDs > ${r.threshold} chars.`;
+      if(r.samples&&r.samples.length) t+=' e.g. '+r.samples.slice(0,5).join(', ');
+      if(r.errors&&r.errors.length) t+=' — issues: '+r.errors.slice(0,3).join('; ');
+      msg.textContent=t; confirmBtn.disabled = r.count===0;
+    }catch(e){ msg.textContent='Error: '+e.message; }
+  };
+  confirmBtn.onclick=async()=>{
+    if(!confirm('Rewrite these UIDs on '+accName(body().side==='a'?p.a:p.b)+'? Then run a sync.'))return;
+    msg.textContent='fixing…';
+    try{ const r=await api('/api/repair',{method:'POST',body:JSON.stringify(body())});
+      toast('Rewrote '+r.fixed+' UID(s) — now run a sync'); dlg.remove();
     }catch(e){ msg.textContent='Error: '+e.message; }
   };
 }

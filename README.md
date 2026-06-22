@@ -143,6 +143,11 @@ the copy-paste.) The token is refreshed automatically afterwards — one-time st
   A. Clearing a CalDAV side (iCloud/Nextcloud) is solid; clearing **Google** is
   best-effort. To just validate a setup without changing anything, use **Load
   collections** (discovery is read-only).
+- **iCloud rejects over-long UIDs:** iCloud returns 404 on upload for events
+  with very long UIDs (e.g. 64-char Outlook/Exchange GlobalObjectIds), and
+  vdirsyncer aborts the collection on the first failure. Use **Configuration →
+  pair → Fix UIDs…** on the side that holds them (preview shows the count) to
+  rewrite those to short, safe UIDs, then sync. Reliable for CalDAV, best-effort for Google.
 - **No date filter during sync:** vdirsyncer syncs whole collections, so an
   ongoing "ignore events older than X months" is **not possible**. The only
   date-based control is the one-time "newer than N months" option in the Clear tool.
