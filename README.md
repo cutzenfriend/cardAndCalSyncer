@@ -22,6 +22,16 @@ parses its output into a SQLite DB and shows everything in the browser.
 - **Alerts** via [Apprise](https://github.com/caronc/apprise) (email, ntfy, Telegram, Discord …)
 - **Healthcheck**, logs in `docker logs` and a file, bind mounts, non-root container
 
+## Screenshots
+
+**Activity feed** — every change with its action, calendar, source → target and the resolved item title:
+
+![CaCs activity feed](docs/activity.png)
+
+**Sync-pair editor** — map iCloud and Google calendars, pick direction and conflict resolution:
+
+![CaCs sync-pair configuration](docs/sync-pair.png)
+
 ## Quick start
 
 The image is published on Docker Hub as
