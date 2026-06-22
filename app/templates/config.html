@@ -309,8 +309,10 @@ function clearDialog(pid, side){
     <div class="note warn">⚠️ This permanently deletes items from <b>${esc(accName)}</b>'s mapped
       ${what} in this pair. Use it to empty a side before a one-way first sync (then mirror from
       the other side).${acc.kind==='google'?'<br>Note: clearing Google is best-effort.':''}</div>
-    <label>Only items newer than N months <span class="muted">(empty or 0 = everything)</span>
-      <input id="clr-months" type="number" min="0" placeholder="0"></label>
+    ${p.service==='calendar'
+      ? `<label>Only items newer than N months <span class="muted">(empty or 0 = everything)</span>
+           <input id="clr-months" type="number" min="0" placeholder="0"></label>`
+      : `<p class="hint">Contacts have no date, so a time window doesn't apply — this clears all mapped address books.</p>`}
     <div class="row gap" style="margin-top:12px">
       <button class="btn" id="clr-preview">Preview</button>
       <button class="btn danger" id="clr-confirm" disabled>Delete</button>
@@ -318,7 +320,7 @@ function clearDialog(pid, side){
     </div>
     <p id="clr-msg" class="hint"></p></div>`;
   document.body.appendChild(dlg);
-  const months=()=>parseInt(dlg.querySelector('#clr-months').value)||0;
+  const months=()=>{ const el=dlg.querySelector('#clr-months'); return el?(parseInt(el.value)||0):0; };
   const msg=dlg.querySelector('#clr-msg'), confirmBtn=dlg.querySelector('#clr-confirm');
   dlg.querySelector('#clr-cancel').onclick=()=>dlg.remove();
   dlg.querySelector('#clr-preview').onclick=async()=>{

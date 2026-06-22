@@ -56,7 +56,10 @@ async def run_clear(store, pair_id: str, side: str, months: int,
             raise ValueError("Connect Google first")
         os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
-    cutoff = (date.today() - timedelta(days=30 * months)) if months and months > 0 else None
+    # the "newer than N months" window only makes sense for calendars (vCards
+    # have no date) — ignore it for contacts and clear everything.
+    cutoff = (date.today() - timedelta(days=30 * months)
+              if months and months > 0 and svc == "calendar" else None)
 
     from vdirsyncer.cli.utils import storage_instance_from_config
 
