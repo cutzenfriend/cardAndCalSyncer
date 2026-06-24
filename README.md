@@ -160,6 +160,12 @@ the copy-paste.) The token is refreshed automatically afterwards — one-time st
   A. Clearing a CalDAV side (iCloud/Nextcloud) is solid; clearing **Google** is
   best-effort. To just validate a setup without changing anything, use **Load
   collections** (discovery is read-only).
+- **Google Contacts rejects creates of trashed UIDs:** when you delete/clear
+  Google contacts they go to **Trash** for ~30 days and keep their UIDs, so a
+  re-sync that re-creates them gets `400 INVALID_ARGUMENT` (Google's stand-in for
+  "already exists"). Empty **Google Contacts → Trash → Delete forever** before
+  re-syncing. The per-mapping **Diagnose** button (Configuration → contacts pair)
+  confirms this: it create-tests a real contact as-is vs. with a fresh UID.
 - **iCloud rejects over-long UIDs:** iCloud returns 404 on upload for events
   with very long UIDs (e.g. 64-char Outlook/Exchange GlobalObjectIds), and
   vdirsyncer aborts the collection on the first failure. Use **Configuration →

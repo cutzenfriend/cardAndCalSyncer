@@ -345,12 +345,10 @@ async function diagnoseMapping(pid, i){
     const msg=dlg.querySelector('#dg-msg'), out=dlg.querySelector('#dg-out');
     if(r.error){ msg.textContent=r.error; return; }
     if(r.mode==='probe'){
-      const anyOk=(r.results||[]).some(x=>x.ok);
-      msg.innerHTML = anyOk
-        ? 'Good news — the target <b>accepted</b> at least one variation. We can build a Google-direction contact sync that sends that shape.'
-        : 'The target <b>rejected every variation</b> — its CardDAV won\'t create contacts at all (this is the known Google limitation; SyncGene uses Google\'s People API instead).';
+      msg.innerHTML = '<b>'+esc(r.explain||'Probe done.')+'</b>';
       out.classList.remove('hidden');
       out.textContent = (r.results||[]).map(x=>(x.ok?'✓ ':'✗ ')+x.label+'\n    '+x.detail).join('\n\n')
+        + (r.sample&&r.sample.uid ? '\n\nsample contact: '+(r.sample.title||'')+'  ['+r.sample.uid+']' : '')
         + '\n\n(target: '+esc(r.target||'')+')';
     } else {
       msg.innerHTML = r.reason ? ('Server response: <b>'+esc(r.reason)+'</b>') : 'Done.';
