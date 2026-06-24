@@ -52,7 +52,8 @@ def vpair_name(pair_id: str, collection: str) -> str:
     name, leaving the shared `<pid>.collections` register cache (used by
     clear/fix/enrich) untouched.
     """
-    safe = re.sub(r"[^A-Za-z0-9_-]", "_", collection)
+    # vdirsyncer pair/storage names allow only [A-Za-z0-9_] (no hyphens etc.)
+    safe = re.sub(r"[^A-Za-z0-9_]", "_", collection)
     return f"{pair_id}__{safe}"
 
 
