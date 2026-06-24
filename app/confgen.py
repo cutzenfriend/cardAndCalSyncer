@@ -9,7 +9,7 @@ import json
 import re
 from typing import Any
 
-from store import storage_name
+from store import storage_name, vpair_name
 
 STATUS_PATH = "/data/status/"
 TOKEN_DIR = "/data"
@@ -138,8 +138,11 @@ def generate(cfg: dict[str, Any], *, only_pair: str | None = None,
                 _, conflict = mapping_dirconf(coll, p)
         else:
             colls = [[c[0], c[1], c[2]] for c in p.get("collections", []) if len(c) >= 3]
+        # A scoped (single-mapping) sync runs as its own vdirsyncer pair so its
+        # read_only/cache-key don't collide with the pair's other mappings.
+        section = vpair_name(pid, only_collection) if only_collection is not None else pid
         lines += [
-            f"[pair {pid}]",
+            f"[pair {section}]",
             f"a = {_val(sa)}",
             f"b = {_val(sb)}",
             "collections = [" + ", ".join(_val(c) for c in colls) + "]",

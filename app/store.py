@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 from copy import deepcopy
 from typing import Any
@@ -38,6 +39,21 @@ def storage_name(account_id: str, service: str) -> str:
     """Deterministic vdirsyncer storage name for (account, service)."""
     suf = "cal" if service == "calendar" else "card"
     return f"acc_{account_id}_{suf}"
+
+
+def vpair_name(pair_id: str, collection: str) -> str:
+    """vdirsyncer pair name for a single CaCs mapping.
+
+    Each mapping is synced as its own vdirsyncer pair so (a) per-mapping
+    direction (read_only on a storage) doesn't have to be uniform across the
+    pair, and (b) vdirsyncer's per-pair discovery cache key — which hashes the
+    collections list + both storage configs incl. read_only — never collides
+    between mappings of differing direction. Its status/cache live under this
+    name, leaving the shared `<pid>.collections` register cache (used by
+    clear/fix/enrich) untouched.
+    """
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", collection)
+    return f"{pair_id}__{safe}"
 
 
 def _deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:

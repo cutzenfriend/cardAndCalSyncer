@@ -20,7 +20,7 @@ from typing import Any
 
 import aiohttp
 
-from store import storage_name
+from store import storage_name, vpair_name
 
 log = logging.getLogger("cacs.enrich")
 
@@ -63,7 +63,8 @@ def parse_item(raw: str) -> tuple[str | None, str | None]:
 
 # --- status / cache readers ------------------------------------------------
 def _hrefs(pair_id: str, collection: str, uid: str) -> tuple[str | None, str | None]:
-    path = os.path.join(STATUS_PATH, pair_id, collection + ".items")
+    # status items live under the mapping's own vdirsyncer pair name now
+    path = os.path.join(STATUS_PATH, vpair_name(pair_id, collection), collection + ".items")
     if not os.path.exists(path):
         return (None, None)
     con = None

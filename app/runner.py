@@ -16,7 +16,7 @@ import enrich
 import fixuids
 import parser
 from db import Database
-from store import ConfigStore
+from store import ConfigStore, vpair_name
 
 log = logging.getLogger("cacs.runner")
 
@@ -257,14 +257,25 @@ class Runner:
 
     async def _do_sync(self, run_id: int, cfg: dict[str, Any], prev_status: str | None,
                        pair: str | None, collection: str | None = None) -> dict[str, Any]:
-        # Always scope to a single mapping so read_only matches this mapping's
-        # direction (per-mapping bisync/one-way).
+        # Each mapping syncs as its own vdirsyncer pair so read_only matches this
+        # mapping's direction (per-mapping bisync/one-way).
+        vpair = vpair_name(pair, collection)
         conf, secret_env = confgen.generate(cfg, only_pair=pair, only_collection=collection)
         self._write_conf(CONFIG_FILE, conf)
 
-        cmd = ["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE, "sync", f"{pair}/{collection}"]
-
+        cmd = ["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE, "sync", vpair]
         rc, lines = await self._exec(cmd, secret_env, run_id)
+
+        # First sync of this mapping (no cache) or after a direction change:
+        # vdirsyncer keys its cache on collections + storage configs (incl.
+        # read_only) and refuses to sync until re-discovered. Run discover once
+        # for this scoped config, then retry. (Uses this mapping's own pair name,
+        # so it never clobbers the shared `<pid>.collections` register cache.)
+        if rc != 0 and any("vdirsyncer discover" in l for l in lines):
+            await self._exec(["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE,
+                              "discover", vpair], secret_env, run_id)
+            rc, lines = await self._exec(cmd, secret_env, run_id)
+
         parsed = parser.parse_sync_output(lines)
 
         # vdirsyncer hides the cause behind "Unknown error … use -vdebug" (the
@@ -272,7 +283,7 @@ class Runner:
         # (secrets redacted) to capture it into the run log. Counts/status stay
         # from the first pass.
         if rc != 0 or parsed.errors:
-            dbg = ["vdirsyncer", "-v", "DEBUG", "-c", CONFIG_FILE, "sync"] + cmd[6:]
+            dbg = ["vdirsyncer", "-v", "DEBUG", "-c", CONFIG_FILE, "sync", vpair]
             _, dlines = await self._exec(dbg, secret_env, run_id)
             lines = lines + ["", "----- DEBUG retry (redacted) -----"] + dlines
 
