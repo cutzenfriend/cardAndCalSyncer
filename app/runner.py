@@ -47,6 +47,18 @@ def _redact(line: str) -> str:
     return line
 
 
+_HTTP_REASON = re.compile(r"^\s*(\d{3})\b,?\s*(?:message=['\"]([^'\"]*)['\"])?")
+
+
+def _short_reason(reason: str) -> str:
+    """Trim a verbose vdirsyncer/aiohttp reason for the UI, e.g.
+    "400, message='Bad Request', url='…'" -> "400 Bad Request"."""
+    m = _HTTP_REASON.match(reason or "")
+    if m:
+        return (m.group(1) + (" " + m.group(2) if m.group(2) else "")).strip()
+    return (reason or "").strip()[:80]
+
+
 class Runner:
     def __init__(self, db: Database, store: ConfigStore):
         self.db = db
@@ -329,7 +341,7 @@ class Runner:
                 "pair": info.get("pair"),
                 "collection": info.get("collection_short") or sk.collection,
                 "collection_label": info.get("collection_label") or sk.collection,
-                "subtitle": f"skipped — {sk.reason}",
+                "subtitle": f"skipped — {_short_reason(sk.reason)}",
                 "src_name": info.get("src_name"),
                 "src_kind": info.get("src_kind"),
                 "dst_name": info.get("dst_name"),
@@ -350,7 +362,7 @@ class Runner:
 
         skip_note = ""
         if parsed.skipped:
-            shown = ", ".join(f"{s.ident} ({s.reason})" for s in parsed.skipped[:25])
+            shown = ", ".join(f"{s.ident} ({_short_reason(s.reason)})" for s in parsed.skipped[:25])
             more = "" if len(parsed.skipped) <= 25 else f" … +{len(parsed.skipped) - 25} more"
             skip_note = (f"[CaCs] Skipped {len(parsed.skipped)} item(s) the server "
                          f"rejected — already present or refused (e.g. iCloud already "
