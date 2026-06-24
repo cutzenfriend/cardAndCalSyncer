@@ -16,10 +16,28 @@ from typing import Any
 import aiohttp
 
 import enrich
+from store import vpair_name
 
 log = logging.getLogger("cacs.clear")
 
 MAX_ITEMS = 10000  # safety cap
+
+
+def _reset_sync_status(pair_id: str, short: str) -> list[str]:
+    """Delete vdirsyncer's per-mapping sync status so the next sync is treated as
+    a fresh first sync. Without this, vdirsyncer trips its "Storage was completely
+    emptied" guard after we deliberately cleared a side and refuses to sync."""
+    removed: list[str] = []
+    base = os.path.join(enrich.STATUS_PATH, vpair_name(pair_id, short))
+    for suffix in (".items", ".items-journal", ".items-wal", ".items-shm"):
+        path = os.path.join(base, short + suffix)
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+                removed.append(path)
+        except Exception:
+            pass
+    return removed
 
 
 def _item_date(raw: str) -> date | None:
@@ -125,6 +143,15 @@ async def run_clear(store, pair_id: str, side: str, months: int,
                 errors.append(f"{short}: {exc}")
                 continue
 
+    # After a real clear, reset vdirsyncer's sync status for the affected
+    # mapping(s) so the next sync re-mirrors from the other side instead of
+    # tripping the "Storage was completely emptied" guard.
+    status_reset: list[str] = []
+    if execute:
+        for m in pair["collections"]:
+            if not collection or m[0] == collection:
+                status_reset += _reset_sync_status(pair_id, m[0])
+
     return {"count": count, "deleted": deleted, "samples": samples,
             "errors": errors, "account": acc.get("name", acc_id), "side": side,
-            "collection": collection or "all"}
+            "collection": collection or "all", "status_reset": len(status_reset)}
