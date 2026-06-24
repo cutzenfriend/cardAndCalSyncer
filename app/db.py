@@ -197,6 +197,14 @@ class Database:
             r = cur.fetchone()
             return {"create": r["c"], "update": r["u"], "delete": r["d"]}
 
+    def reset_stats(self) -> int:
+        """Zero the create/update/delete counters the dashboard totals are summed
+        from (sync runs). Run history/status/logs are kept; only the counts reset.
+        Returns the number of runs affected."""
+        with self._cursor() as cur:
+            cur.execute("UPDATE runs SET n_create=0, n_update=0, n_delete=0 WHERE kind='sync'")
+            return cur.rowcount
+
     def prune_runs(self, keep: int = 500) -> None:
         """Delete runs older than the newest `keep` (activities via cascade)."""
         with self._cursor() as cur:

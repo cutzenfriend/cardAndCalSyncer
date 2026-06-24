@@ -21,6 +21,7 @@
     <label class="chk"><input type="checkbox" id="al_fail"> on failure</label>
     <label class="chk"><input type="checkbox" id="al_rec"> on recovery</label>
     <button class="btn" id="save-general" onclick="saveGeneral()">Save general</button>
+    <button class="btn small" onclick="testAlert()" title="Send a test notification to the Apprise URLs above">Send test</button>
     <span id="genmsg" class="muted"></span>
   </div>
 </section>
@@ -98,6 +99,18 @@ async function saveGeneral(){
         {interval_seconds:CFG.interval_seconds,sync_enabled:CFG.sync_enabled,
          base_url:CFG.base_url,alerts:CFG.alerts})});
        $('genmsg').textContent='saved ✓'; generalClean(); }catch(e){ $('genmsg').textContent=e.message; }
+}
+async function testAlert(){
+  const urls=$('apprise').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const msg=$('genmsg');
+  if(!urls.length){ msg.textContent='Add at least one Apprise URL first'; return; }
+  const b=event.target, old=b.textContent; b.disabled=true; b.textContent='sending…'; msg.textContent='';
+  try{
+    const r=await api('/api/alerts/test',{method:'POST',body:JSON.stringify({apprise_urls:urls})});
+    msg.textContent = r.ok ? ('test sent to '+r.count+' target(s) ✓ — check your device')
+                           : 'send failed — check the URL(s) and Logs';
+  }catch(e){ msg.textContent='Error: '+e.message; }
+  finally{ b.disabled=false; b.textContent=old; }
 }
 
 // --- ACCOUNTS ---

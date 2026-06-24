@@ -424,6 +424,35 @@ async def api_save_config(request: Request, _: str = Depends(require_api)):
     return {"ok": True, "ready": _ready_to_sync(cfg)}
 
 
+@app.post("/api/stats/reset")
+def api_reset_stats(_: str = Depends(require_api)):
+    n = db.reset_stats()
+    return {"ok": True, "runs": n}
+
+
+@app.post("/api/alerts/test")
+async def api_test_alert(request: Request, _: str = Depends(require_api)):
+    """Send a test notification to the given (or saved) Apprise URLs."""
+    import alerts as al
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    urls = body.get("apprise_urls")
+    if urls is None:
+        urls = store.get().get("alerts", {}).get("apprise_urls", [])
+    urls = [u.strip() for u in (urls or []) if u and u.strip()]
+    if not urls:
+        raise HTTPException(400, "Add at least one Apprise URL first")
+    if al.apprise is None:
+        raise HTTPException(503, "Apprise is not installed in this image")
+    ok = await asyncio.to_thread(
+        al.notify, urls, f"{APP_NAME}: test notification",
+        "This is a test from CaCs. If you can read this, your Apprise setup works.",
+        kind="success")
+    return {"ok": bool(ok), "count": len(urls)}
+
+
 # --- API: accounts ----------------------------------------------------------
 def _apply_secrets(target: dict[str, Any], incoming: dict[str, Any]) -> None:
     from store import SECRET_FIELDS
