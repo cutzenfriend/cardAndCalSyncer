@@ -276,6 +276,18 @@ class Runner:
                               "discover", vpair], secret_env, run_id)
             rc, lines = await self._exec(cmd, secret_env, run_id)
 
+        # "Storage … was completely emptied": vdirsyncer's guard against deleting
+        # a side to match one that lost all items vs the last status. This is what
+        # happens right after Clear (a side was deliberately emptied). Reset this
+        # mapping's status and retry once — with no status the sync is create-only
+        # (it re-mirrors from the other side and can't delete anything), so this
+        # is safe and is exactly the clear-then-sync workflow.
+        if rc != 0 and any("was completely emptied" in l for l in lines):
+            removed = clear_mod._reset_sync_status(pair, collection)
+            log.info("sync run #%s: a side was emptied — reset status (%s file(s)) "
+                     "and retrying as a fresh first sync", run_id, len(removed))
+            rc, lines = await self._exec(cmd, secret_env, run_id)
+
         parsed = parser.parse_sync_output(lines)
 
         # vdirsyncer hides the cause behind "Unknown error … use -vdebug" (the
