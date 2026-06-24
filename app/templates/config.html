@@ -302,6 +302,7 @@ function renderMap(pid){
       `<td class="uid" data-label="A">${esc(c[1])}</td><td class="uid" data-label="B">${esc(c[2])}</td>`+
       `<td data-label="Direction"><div class="row gap wrap">${dirSel}${confSel}</div></td>`+
       `<td class="row gap" data-label=""><button class="btn small" onclick="syncMapping('${pid}',${i})">Sync</button>`+
+      `<button class="btn small" onclick="diagnoseMapping('${pid}',${i})" title="Run one DEBUG sync and show why the server rejects an item">Diagnose</button>`+
       `<button class="btn small danger" onclick="delMap('${pid}',${i})">×</button></td>`; tb.appendChild(tr); });
   if(!colls.length) tb.innerHTML='<tr><td colspan="5" class="muted">No mappings yet.</td></tr>';
 }
@@ -323,6 +324,28 @@ async function syncMapping(pid, i){
   try{ await api('/api/sync',{method:'POST',body:JSON.stringify({pair:pid, collection:c[0]})});
        toast('Sync started for '+((CFG.pairs[pid].labels||{})[c[0]]||c[0])); }
   catch(e){ toast(e.message,true); }
+}
+async function diagnoseMapping(pid, i){
+  if(CFG.pairs[pid]._new){ toast('Save the pair first',true); return; }
+  const c=CFG.pairs[pid].collections[i];
+  const name=(CFG.pairs[pid].labels||{})[c[0]]||c[0];
+  const dlg=document.createElement('div'); dlg.className='overlay';
+  dlg.innerHTML=`<div class="dialog"><h2>Diagnose upload — ${esc(name)}</h2>
+    <p class="hint">Runs one DEBUG sync of this mapping and shows the first item the
+    target server rejects: the request that was sent and the server's reply body
+    (which a normal run hides). It attempts a create, so it can take ~10–30 s.</p>
+    <p id="dg-msg" class="muted">running…</p>
+    <pre id="dg-out" class="logbox hidden"></pre>
+    <div class="sticky row gap" style="justify-content:flex-end">
+      <button class="btn" id="dg-close">Close</button></div></div>`;
+  document.body.appendChild(dlg);
+  dlg.querySelector('#dg-close').onclick=()=>dlg.remove();
+  try{
+    const r=await api('/api/diagnose',{method:'POST',body:JSON.stringify({pair:pid, collection:c[0]})});
+    dlg.querySelector('#dg-msg').innerHTML = r.reason ? ('Server response: <b>'+esc(r.reason)+'</b>') : 'Done.';
+    const out=dlg.querySelector('#dg-out'); out.classList.remove('hidden');
+    out.textContent = r.detail || '(no failing upload captured — nothing was rejected)';
+  }catch(e){ dlg.querySelector('#dg-msg').textContent='Error: '+e.message; }
 }
 
 async function savePair(pid){

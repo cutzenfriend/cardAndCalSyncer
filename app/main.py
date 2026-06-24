@@ -583,6 +583,18 @@ async def api_discover(request: Request, _: str = Depends(require_api)):
     return await runner.discover(pair, list_all=True)
 
 
+@app.post("/api/diagnose")
+async def api_diagnose(request: Request, _: str = Depends(require_api)):
+    body = await request.json()
+    pair, collection = body.get("pair"), body.get("collection")
+    if pair not in store.get()["pairs"]:
+        raise HTTPException(400, "Unknown pair")
+    if not collection:
+        raise HTTPException(400, "collection required")
+    _require_idle()
+    return await runner.diagnose(pair, collection)
+
+
 @app.post("/api/sync")
 async def api_sync(request: Request, _: str = Depends(require_api)):
     body: dict[str, Any] = {}

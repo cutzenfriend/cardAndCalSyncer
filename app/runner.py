@@ -59,6 +59,28 @@ def _short_reason(reason: str) -> str:
     return (reason or "").strip()[:80]
 
 
+def _first_failure_block(lines: list[str]) -> tuple[str, str]:
+    """From a DEBUG sync, pull the first item PUT through its error — that block
+    holds the request (incl. the item body) and the server's response body (which
+    vdirsyncer logs at DEBUG for status >= 400). Returns (block, short_reason)."""
+    start = None
+    for i, l in enumerate(lines):
+        if " PUT " in f" {l}" and (".vcf" in l or ".ics" in l):
+            start = i
+            break
+    if start is None:
+        return "", ""
+    block: list[str] = []
+    reason = ""
+    for l in lines[start:start + 60]:
+        block.append(l)
+        m = re.search(r"Unknown error occurred for \S+:\s*(.+)$", l)
+        if m:
+            reason = _short_reason(m.group(1))
+            break
+    return "\n".join(block), reason
+
+
 class Runner:
     def __init__(self, db: Database, store: ConfigStore):
         self.db = db
@@ -394,6 +416,44 @@ class Runner:
             "counts": counts, "errors": parsed.errors, "warnings": parsed.warnings,
             "skipped": len(parsed.skipped),
         }
+
+    # --- diagnose a failing upload ----------------------------------------
+    async def diagnose(self, pair: str, collection: str) -> dict[str, Any]:
+        """Run one DEBUG sync of a mapping and surface the first failing item's
+        request + the server's response body (which vdirsyncer logs at DEBUG for
+        4xx but our normal runs suppress). Resets the status first so it actually
+        attempts the upload (create-only, no deletes)."""
+        async with self._lock:
+            self.busy = True
+            self.busy_since = time.time()
+            self._op_task = asyncio.current_task()
+            try:
+                cfg = self.store.get()
+                if pair not in cfg["pairs"]:
+                    return {"status": "failed", "reason": "unknown pair", "detail": ""}
+                run_id = self.db.start_run("diagnose", pair, "manual", _now(),
+                                           collection=collection)
+                vpair = vpair_name(pair, collection)
+                conf, secret_env = confgen.generate(cfg, only_pair=pair,
+                                                     only_collection=collection)
+                self._write_conf(CONFIG_FILE, conf)
+                clear_mod._reset_sync_status(pair, collection)   # force a create attempt
+                await self._exec(["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE,
+                                  "discover", vpair], secret_env, run_id)
+                rc, lines = await self._exec(["vdirsyncer", "-v", "DEBUG", "-c",
+                                              CONFIG_FILE, "sync", vpair], secret_env, run_id)
+                block, reason = _first_failure_block(lines)
+                self.db.finish_run(run_id, status="success", finished_at=_now(), rc=rc,
+                                   n_create=0, n_update=0, n_delete=0, n_errors=0,
+                                   log="\n".join(lines))
+                self.db.prune_runs()
+                return {"status": "ok" if block else "empty", "run_id": run_id,
+                        "reason": reason or "no failing upload captured",
+                        "detail": block or "\n".join(lines[-80:])}
+            finally:
+                self.busy = False
+                self.busy_since = None
+                self._op_task = None
 
     def _maybe_alert(self, cfg: dict[str, Any], status: str, prev_status: str | None,
                      run_id: int, parsed: parser.ParsedRun, rc: int) -> None:
