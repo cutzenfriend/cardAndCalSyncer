@@ -279,10 +279,10 @@ class Runner:
         parsed = parser.parse_sync_output(lines)
 
         # vdirsyncer hides the cause behind "Unknown error … use -vdebug" (the
-        # traceback is only logged at DEBUG). On failure, retry once at DEBUG
-        # (secrets redacted) to capture it into the run log. Counts/status stay
-        # from the first pass.
-        if rc != 0 or parsed.errors:
+        # traceback is only logged at DEBUG). Retry once at DEBUG (secrets
+        # redacted) to capture it — but only for GENUINE failures. A non-zero exit
+        # caused purely by skipped items (per-item 412/404) needs no traceback.
+        if parsed.errors or (rc != 0 and not parsed.skipped):
             dbg = ["vdirsyncer", "-v", "DEBUG", "-c", CONFIG_FILE, "sync", vpair]
             _, dlines = await self._exec(dbg, secret_env, run_id)
             lines = lines + ["", "----- DEBUG retry (redacted) -----"] + dlines
@@ -308,12 +308,29 @@ class Runner:
 
         counts = parsed.counts
         n_errors = len(parsed.errors)
-        status = "success" if (rc == 0 and n_errors == 0) else "failed"
+        # Items the server rejected (already present / refused) are skips, not
+        # failures: a run is successful unless there were real errors. A non-zero
+        # exit explained entirely by skips still counts as success.
+        if n_errors:
+            status = "failed"
+        elif rc != 0 and not parsed.skipped:
+            status = "failed"
+        else:
+            status = "success"
+
+        skip_note = ""
+        if parsed.skipped:
+            shown = ", ".join(f"{s.ident} ({s.reason})" for s in parsed.skipped[:25])
+            more = "" if len(parsed.skipped) <= 25 else f" … +{len(parsed.skipped) - 25} more"
+            skip_note = (f"[CaCs] Skipped {len(parsed.skipped)} item(s) the server "
+                         f"rejected — already present or refused (e.g. iCloud already "
+                         f"has the event, or won't accept it): {shown}{more}\n\n")
+
         self.db.finish_run(
             run_id, status=status, finished_at=_now(), rc=rc,
             n_create=counts["create"], n_update=counts["update"],
             n_delete=counts["delete"], n_errors=n_errors,
-            log="\n".join(lines),
+            log=skip_note + "\n".join(lines),
         )
         self.db.prune_runs()
 
@@ -327,12 +344,13 @@ class Runner:
             except Exception:
                 log.debug("enrichment skipped/failed", exc_info=True)
 
-        log.info("sync run #%s done: %s (rc=%s, +%s ~%s -%s, %s errors)",
+        log.info("sync run #%s done: %s (rc=%s, +%s ~%s -%s, %s errors, %s skipped)",
                  run_id, status, rc, counts["create"], counts["update"],
-                 counts["delete"], n_errors)
+                 counts["delete"], n_errors, len(parsed.skipped))
         return {
             "run_id": run_id, "status": status, "rc": rc,
             "counts": counts, "errors": parsed.errors, "warnings": parsed.warnings,
+            "skipped": len(parsed.skipped),
         }
 
     def _maybe_alert(self, cfg: dict[str, Any], status: str, prev_status: str | None,

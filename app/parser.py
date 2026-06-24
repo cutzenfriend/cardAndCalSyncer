@@ -29,6 +29,15 @@ _DELETE = re.compile(r"Deleting item (?P<ident>.+?) from (?P<storage>\S+)\s*$")
 _SYNCING = re.compile(r"Syncing (?P<status>\S+)\s*$")
 _LEVEL = re.compile(r"^(?P<level>error|warning|critical):\s*(?P<msg>.*)$", re.I)
 
+# A per-item failure: vdirsyncer logs "Unknown error occurred for <pair>/<coll>:
+# <reason>" right after the "Copying/Deleting item" line and carries on with the
+# next item. These are item-level (e.g. iCloud 412 Precondition Failed / 404 Not
+# Found for an event it already has or refuses), not a failure of the whole run.
+_ITEM_FAIL = re.compile(
+    r"^(?:error|critical):\s*Unknown error occurred for \S+:\s*(?P<reason>.+?)\s*$", re.I)
+# noise: the hint line that always follows an error — not an error itself
+_VDEBUG_HINT = re.compile(r"Use\s+`?-v\s?debug`?\s+to see", re.I)
+
 _OP_TO_ACTION = {"uploading": "create", "updating": "update"}
 
 
@@ -42,10 +51,19 @@ class Activity:
 
 
 @dataclass
+class Skip:
+    action: str          # create | update | delete (the attempt that was rejected)
+    ident: str           # item UID
+    collection: str      # short name
+    reason: str          # server reason, e.g. "Precondition Failed" / "Not Found"
+
+
+@dataclass
 class ParsedRun:
     activities: list[Activity] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    skipped: list[Skip] = field(default_factory=list)
     synced_collections: list[str] = field(default_factory=list)
 
     @property
@@ -90,17 +108,38 @@ def classify_line(line: str) -> tuple[str, str] | None:
 
 def parse_sync_output(lines: list[str]) -> ParsedRun:
     run = ParsedRun()
+    pending: Activity | None = None   # most recent Copying/Deleting attempt
     for line in lines:
         act = parse_sync_line(line)
         if act:
             run.activities.append(act)
+            pending = act
             continue
         m = _SYNCING.search(line)
         if m:
             run.synced_collections.append(m.group("status"))
+            pending = None
+            continue
+        mf = _ITEM_FAIL.match(line.strip())
+        if mf:
+            reason = mf.group("reason")
+            if pending is not None:
+                # the item we just tried to copy/delete was rejected by the
+                # server -> a skip, not a created/updated item or a run failure.
+                if run.activities and run.activities[-1] is pending:
+                    run.activities.pop()
+                run.skipped.append(Skip(action=pending.action, ident=pending.ident,
+                                        collection=pending.collection, reason=reason))
+                pending = None
+            else:
+                # no preceding item -> a collection-level failure (e.g. locked db)
+                run.errors.append(f"Unknown error: {reason}")
             continue
         lvl = classify_line(line)
         if lvl:
+            pending = None
+            if _VDEBUG_HINT.search(lvl[1]):
+                continue   # ignore the "use -vdebug" hint that follows errors
             (run.errors if lvl[0] == "error" else run.warnings).append(lvl[1])
     return run
 
