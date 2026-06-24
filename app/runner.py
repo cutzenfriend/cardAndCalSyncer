@@ -59,7 +59,7 @@ class Runner:
 
     # --- subprocess --------------------------------------------------------
     async def _exec(self, cmd: list[str], secret_env: dict[str, str],
-                    run_id: int, timeout: int = 180) -> tuple[int, list[str]]:
+                    run_id: int, idle_timeout: int = 300) -> tuple[int, list[str]]:
         env = dict(os.environ)
         env.update(secret_env)
         env.setdefault("HOME", "/data")
@@ -96,7 +96,12 @@ class Runner:
                 assert proc.stdout is not None
                 buf = b""
                 while True:
-                    chunk = await proc.stdout.read(65536)
+                    # Inactivity timeout: abort only if vdirsyncer prints NOTHING
+                    # for idle_timeout s (a genuine hang). A large sync keeps
+                    # emitting per-item lines, so it's never killed just for taking
+                    # a while — only a hard total cap (the old bug) did that.
+                    chunk = await asyncio.wait_for(proc.stdout.read(65536),
+                                                   timeout=idle_timeout)
                     if not chunk:
                         break
                     buf += chunk
@@ -113,11 +118,10 @@ class Runner:
                 await proc.wait()
 
             try:
-                # Bounds any hang (e.g. vdirsyncer trying its own OAuth browser flow).
-                await asyncio.wait_for(_drain(), timeout=timeout)
+                await _drain()
             except asyncio.TimeoutError:
-                msg = (f"[CaCs] aborted: timed out after {timeout}s "
-                       "(is the account connected and reachable?)")
+                msg = (f"[CaCs] aborted: no output for {idle_timeout}s "
+                       "(stuck, or the account is unreachable?)")
                 lines.append(msg)
                 rl.write(f"{_now()} {msg}\n")
             except asyncio.CancelledError:
