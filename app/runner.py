@@ -12,6 +12,7 @@ from typing import Any
 import alerts
 import clear as clear_mod
 import confgen
+import diagnose as diag_mod
 import enrich
 import fixuids
 import parser
@@ -433,6 +434,24 @@ class Runner:
                     return {"status": "failed", "reason": "unknown pair", "detail": ""}
                 run_id = self.db.start_run("diagnose", pair, "manual", _now(),
                                            collection=collection)
+                svc = cfg["pairs"][pair].get("service", "calendar")
+
+                # Contacts: probe what the (Google) target's CardDAV will accept,
+                # by trying a few create variations (the real question, since
+                # Google rejects even minimal valid vCards).
+                if svc == "contacts":
+                    res = await asyncio.wait_for(
+                        diag_mod.probe_target(self.store, pair, collection), timeout=150)
+                    summ = "; ".join(f"{r['label']}: {'OK' if r['ok'] else 'rejected'}"
+                                     for r in res.get("results", []))
+                    self.db.finish_run(run_id, status="success", finished_at=_now(), rc=0,
+                                       n_create=0, n_update=0, n_delete=0, n_errors=0,
+                                       log=res.get("error") or summ or "probe done")
+                    self.db.prune_runs()
+                    return {"mode": "probe", "run_id": run_id, **res}
+
+                # Calendars (and anything else): capture the first failing item's
+                # request + the server's response body from a DEBUG sync.
                 vpair = vpair_name(pair, collection)
                 conf, secret_env = confgen.generate(cfg, only_pair=pair,
                                                      only_collection=collection)
@@ -447,7 +466,7 @@ class Runner:
                                    n_create=0, n_update=0, n_delete=0, n_errors=0,
                                    log="\n".join(lines))
                 self.db.prune_runs()
-                return {"status": "ok" if block else "empty", "run_id": run_id,
+                return {"mode": "capture", "run_id": run_id,
                         "reason": reason or "no failing upload captured",
                         "detail": block or "\n".join(lines[-80:])}
             finally:

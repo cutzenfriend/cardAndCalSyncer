@@ -342,9 +342,21 @@ async function diagnoseMapping(pid, i){
   dlg.querySelector('#dg-close').onclick=()=>dlg.remove();
   try{
     const r=await api('/api/diagnose',{method:'POST',body:JSON.stringify({pair:pid, collection:c[0]})});
-    dlg.querySelector('#dg-msg').innerHTML = r.reason ? ('Server response: <b>'+esc(r.reason)+'</b>') : 'Done.';
-    const out=dlg.querySelector('#dg-out'); out.classList.remove('hidden');
-    out.textContent = r.detail || '(no failing upload captured — nothing was rejected)';
+    const msg=dlg.querySelector('#dg-msg'), out=dlg.querySelector('#dg-out');
+    if(r.error){ msg.textContent=r.error; return; }
+    if(r.mode==='probe'){
+      const anyOk=(r.results||[]).some(x=>x.ok);
+      msg.innerHTML = anyOk
+        ? 'Good news — the target <b>accepted</b> at least one variation. We can build a Google-direction contact sync that sends that shape.'
+        : 'The target <b>rejected every variation</b> — its CardDAV won\'t create contacts at all (this is the known Google limitation; SyncGene uses Google\'s People API instead).';
+      out.classList.remove('hidden');
+      out.textContent = (r.results||[]).map(x=>(x.ok?'✓ ':'✗ ')+x.label+'\n    '+x.detail).join('\n\n')
+        + '\n\n(target: '+esc(r.target||'')+')';
+    } else {
+      msg.innerHTML = r.reason ? ('Server response: <b>'+esc(r.reason)+'</b>') : 'Done.';
+      out.classList.remove('hidden');
+      out.textContent = r.detail || '(no failing upload captured — nothing was rejected)';
+    }
   }catch(e){ dlg.querySelector('#dg-msg').textContent='Error: '+e.message; }
 }
 
