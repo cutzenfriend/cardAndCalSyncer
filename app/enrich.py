@@ -66,14 +66,19 @@ def _hrefs(pair_id: str, collection: str, uid: str) -> tuple[str | None, str | N
     path = os.path.join(STATUS_PATH, pair_id, collection + ".items")
     if not os.path.exists(path):
         return (None, None)
+    con = None
     try:
-        con = sqlite3.connect(path)
+        # Read-only + short busy timeout: never take a write lock on vdirsyncer's
+        # status DB and never leave it locked for the next sync. Always close.
+        con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
         con.row_factory = sqlite3.Row
         row = con.execute("SELECT href_a, href_b FROM status WHERE ident=?", (uid,)).fetchone()
-        con.close()
         return (row["href_a"], row["href_b"]) if row else (None, None)
     except Exception:
         return (None, None)
+    finally:
+        if con is not None:
+            con.close()
 
 
 def _collection_deltas(pair_id: str) -> dict[str, tuple[dict, dict]]:

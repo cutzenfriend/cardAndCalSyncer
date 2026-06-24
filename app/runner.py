@@ -90,16 +90,39 @@ class Runner:
                 # Bounds any hang (e.g. vdirsyncer trying its own OAuth browser flow).
                 await asyncio.wait_for(_drain(), timeout=timeout)
             except asyncio.TimeoutError:
-                proc.kill()
                 msg = (f"[CaCs] aborted: timed out after {timeout}s "
                        "(is the account connected and reachable?)")
                 lines.append(msg)
                 rl.write(f"{_now()} {msg}\n")
-                try:
-                    await proc.wait()
-                except Exception:
-                    pass
+            except asyncio.CancelledError:
+                # Stop button / cancellation: fall through to the finally so the
+                # child is killed, then re-raise to unwind the operation.
+                msg = "[CaCs] aborted: cancelled — terminating vdirsyncer"
+                lines.append(msg)
+                rl.write(f"{_now()} {msg}\n")
+                raise
+            finally:
+                # Always make sure the vdirsyncer child is dead. If it survives
+                # (timeout/cancel/error), it keeps holding its status-DB lock and
+                # the next sync fails with "database is locked".
+                await self._kill(proc)
         return (proc.returncode if proc.returncode is not None else -1), lines
+
+    @staticmethod
+    async def _kill(proc: asyncio.subprocess.Process) -> None:
+        """Terminate a (possibly hung) child so it releases its file locks.
+        SIGKILL releases POSIX/SQLite locks at the kernel level immediately;
+        the await is only to reap the zombie and is best-effort."""
+        if proc.returncode is not None:
+            return
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            return
+        try:
+            await asyncio.wait_for(asyncio.shield(proc.wait()), timeout=5)
+        except (Exception, asyncio.CancelledError):
+            pass
 
     def _unconnected_google(self, cfg: dict[str, Any], pair: str) -> list[str]:
         """Names of Google accounts in this pair that have no OAuth token yet."""
