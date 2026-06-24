@@ -54,7 +54,8 @@ class Activity:
 class Skip:
     action: str          # create | update | delete (the attempt that was rejected)
     ident: str           # item UID
-    collection: str      # short name
+    dest_storage: str    # instance_name of the target side
+    collection: str      # resolved collection id (as logged)
     reason: str          # server reason, e.g. "Precondition Failed" / "Not Found"
 
 
@@ -129,6 +130,7 @@ def parse_sync_output(lines: list[str]) -> ParsedRun:
                 if run.activities and run.activities[-1] is pending:
                     run.activities.pop()
                 run.skipped.append(Skip(action=pending.action, ident=pending.ident,
+                                        dest_storage=pending.dest_storage,
                                         collection=pending.collection, reason=reason))
                 pending = None
             else:

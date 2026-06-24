@@ -79,6 +79,7 @@ textarea{width:100%;resize:vertical}
 
 .act{font-weight:600;white-space:nowrap}
 .act-create{color:var(--ok)}.act-update{color:var(--accent)}.act-delete{color:var(--bad)}
+.act-skip{color:var(--warn)}
 .side{font-size:11px;padding:1px 7px;border-radius:5px;font-weight:600}
 .side.icloud{background:rgba(58,141,222,.18);color:var(--icloud)}
 .side.google{background:rgba(232,112,58,.18);color:var(--google)}

@@ -135,26 +135,39 @@ class ConfigStore:
         return storage_name(pair["a"], svc), storage_name(pair["b"], svc)
 
     def resolve_dest(self, dest_storage: str, collection: str | None = None) -> dict[str, Any] | None:
-        """From an activity's destination storage, derive pair + source/target account.
+        """From an activity's destination storage + collection, derive pair, the
+        mapping short name and source/target account.
 
-        If `collection` (the mapping short name) is given, also resolve the real
-        calendar/address-book display name from the pair's stored labels.
+        vdirsyncer logs the *resolved* collection id (e.g. the iCloud calendar
+        UUID), not our mapping short. We map it back to the short via the pair's
+        collections so the status/cache lookups (keyed by short) and the stored
+        display label line up.
         """
         cfg = self.get()
         accs = cfg["accounts"]
         for pid, p in cfg["pairs"].items():
             sa, sb = self.pair_storages(p)
             if dest_storage == sa:
-                dst, src = p["a"], p["b"]
+                dst, src, side_idx = p["a"], p["b"], 1   # collection id at index 1
             elif dest_storage == sb:
-                dst, src = p["b"], p["a"]
+                dst, src, side_idx = p["b"], p["a"], 2   # collection id at index 2
             else:
                 continue
-            label = (p.get("labels", {}) or {}).get(collection) if collection else None
+            labels = p.get("labels", {}) or {}
+            short = None
+            if collection is not None:
+                for c in p.get("collections", []):
+                    if len(c) > side_idx and c[side_idx] == collection:
+                        short = c[0]
+                        break
+                if short is None and collection in labels:
+                    short = collection           # already a short
+            short = short or collection
             return {
                 "pair": p.get("name") or pid,
                 "pair_id": pid,
-                "collection_label": label or collection,
+                "collection_short": short,
+                "collection_label": labels.get(short) or short,
                 "dst_name": accs.get(dst, {}).get("name", dst),
                 "dst_kind": accs.get(dst, {}).get("kind", "caldav"),
                 "src_name": accs.get(src, {}).get("name", src),

@@ -290,12 +290,13 @@ class Runner:
         enrich_items: list[dict[str, Any]] = []
         for act in parsed.activities:
             info = self.store.resolve_dest(act.dest_storage, act.collection) or {}
+            short = info.get("collection_short") or act.collection
             act_id = self.db.add_activity(run_id, _now(), {
                 "action": act.action,
                 "ident": act.ident,
                 "pair": info.get("pair"),
-                "collection": act.collection,
-                "collection_label": info.get("collection_label") or act.collection,
+                "collection": short,
+                "collection_label": info.get("collection_label") or short,
                 "src_name": info.get("src_name"),
                 "src_kind": info.get("src_kind"),
                 "dst_name": info.get("dst_name"),
@@ -304,7 +305,24 @@ class Runner:
             # deletes can't be enriched (item is gone); only create/update
             if act.action != "delete" and info.get("pair_id"):
                 enrich_items.append({"activity_id": act_id, "pair_id": info["pair_id"],
-                                     "collection": act.collection, "uid": act.ident})
+                                     "collection": short, "uid": act.ident})
+
+        # log skipped items too, so they're visible in the Activity feed (with the
+        # server's reason). Titles backfill later via "Resolve names".
+        for sk in parsed.skipped:
+            info = self.store.resolve_dest(sk.dest_storage, sk.collection) or {}
+            self.db.add_activity(run_id, _now(), {
+                "action": "skip",
+                "ident": sk.ident,
+                "pair": info.get("pair"),
+                "collection": info.get("collection_short") or sk.collection,
+                "collection_label": info.get("collection_label") or sk.collection,
+                "subtitle": f"skipped — {sk.reason}",
+                "src_name": info.get("src_name"),
+                "src_kind": info.get("src_kind"),
+                "dst_name": info.get("dst_name"),
+                "dst_kind": info.get("dst_kind"),
+            })
 
         counts = parsed.counts
         n_errors = len(parsed.errors)

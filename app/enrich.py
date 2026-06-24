@@ -209,6 +209,10 @@ async def resolve(store, db, pair_id: str, collection: str | None = None) -> dic
             short = mapping[0]
             if collection and short != collection:
                 continue
+            # activities may be keyed by the short OR the resolved collection id
+            # (older rows stored the id), so backfill against all of them.
+            keys = [k for k in (short, mapping[1] if len(mapping) > 1 else None,
+                                mapping[2] if len(mapping) > 2 else None) if k]
             a_delta, b_delta = deltas.get(short, ({}, {}))
             # try a CalDAV side first, fall back to the other (incl. Google)
             sides = [(pair["a"], accs.get(pair["a"], {}), a_delta),
@@ -232,7 +236,8 @@ async def resolve(store, db, pair_id: str, collection: str | None = None) -> dic
                             item, _ = await storage.get(href)
                             title, sub = parse_item(item.raw)
                             if title and item.uid:
-                                resolved += db.set_titles_by_uid(short, item.uid, title, sub)
+                                for key in keys:
+                                    resolved += db.set_titles_by_uid(key, item.uid, title, sub)
                         except Exception:
                             continue
                     done = True  # this side worked
