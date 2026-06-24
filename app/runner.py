@@ -23,6 +23,7 @@ log = logging.getLogger("cacs.runner")
 CONFIG_FILE = "/config/vdirsyncer.conf"
 DISCOVER_CONF = "/config/.discover.conf"
 ROLLING_LOG = "/logs/vdirsyncer.log"
+LINE_CAP = 16384  # max chars kept per output line (truncate huge base64 dumps)
 
 
 def _now() -> str:
@@ -78,12 +79,37 @@ class Runner:
                 env=env,
             )
 
+            def _emit(raw: bytes) -> None:
+                text = raw.decode("utf-8", "replace").rstrip("\r\n")
+                if len(text) > LINE_CAP:           # e.g. an inline base64 PHOTO/ATTACH
+                    text = text[:LINE_CAP] + " …[truncated]"
+                line = _redact(text)
+                lines.append(line)
+                rl.write(f"{_now()} {line}\n")
+
             async def _drain() -> None:
+                # Read in fixed-size chunks and split lines ourselves. Line-based
+                # iteration over StreamReader enforces a 64 KB limit and raises
+                # "Separator is found, but chunk is longer than limit" on a single
+                # long line (vCard PHOTO, event ATTACH, big DEBUG dump) — read()
+                # has no such limit.
                 assert proc.stdout is not None
-                async for raw in proc.stdout:
-                    line = _redact(raw.decode("utf-8", "replace").rstrip("\n"))
-                    lines.append(line)
-                    rl.write(f"{_now()} {line}\n")
+                buf = b""
+                while True:
+                    chunk = await proc.stdout.read(65536)
+                    if not chunk:
+                        break
+                    buf += chunk
+                    nl = buf.find(b"\n")
+                    while nl >= 0:
+                        _emit(buf[:nl])
+                        buf = buf[nl + 1:]
+                        nl = buf.find(b"\n")
+                    if len(buf) > LINE_CAP * 4:     # no newline yet: flush, don't grow
+                        _emit(buf)
+                        buf = b""
+                if buf:
+                    _emit(buf)
                 await proc.wait()
 
             try:
