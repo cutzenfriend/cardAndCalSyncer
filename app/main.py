@@ -474,13 +474,25 @@ async def api_save_pair(request: Request, _: str = Depends(require_api)):
         raise HTTPException(400, "Invalid direction")
     pairs = cfg["pairs"]
     pid = body.get("id") or secrets.token_hex(4)
+    default_conflict = body.get("conflict_resolution", "a wins")
+    # Direction + conflict are per-mapping now. Materialise each collection as
+    # [short, a, b, direction, conflict], falling back to the pair-level values
+    # for entries saved before per-mapping settings existed.
+    raw_colls = body.get("collections", pairs.get(pid, {}).get("collections", []))
+    collections = []
+    for c in raw_colls:
+        if not c or len(c) < 3:
+            continue
+        c_dir = c[3] if len(c) >= 4 and c[3] in ("both", "a_to_b", "b_to_a") else direction
+        c_conf = c[4] if len(c) >= 5 and c[4] in ("a wins", "b wins") else default_conflict
+        collections.append([c[0], c[1], c[2], c_dir, c_conf])
     pairs[pid] = {
         "name": body.get("name") or pid,
         "service": body.get("service", "calendar"),
         "a": a, "b": b,
-        "direction": direction,
-        "conflict_resolution": body.get("conflict_resolution", "a wins"),
-        "collections": body.get("collections", pairs.get(pid, {}).get("collections", [])),
+        "direction": direction,                 # default for new mappings / fallback
+        "conflict_resolution": default_conflict,
+        "collections": collections,
         "labels": body.get("labels", pairs.get(pid, {}).get("labels", {})),
     }
     store.replace("pairs", pairs)

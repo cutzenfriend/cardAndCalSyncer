@@ -247,19 +247,13 @@ function renderPairs(){
           <option value="contacts" ${p.service==='contacts'?'selected':''}>Contacts</option></select></label>
         <label>Side A<select data-p="a">${accountOptions(p.a)}</select></label>
         <label>Side B<select data-p="b">${accountOptions(p.b)}</select></label>
-        <label>Direction<select data-p="direction">
-          <option value="both" ${(p.direction||'both')==='both'?'selected':''}>Bidirectional (both ways)</option>
-          <option value="a_to_b" ${p.direction==='a_to_b'?'selected':''}>A → B (A is source, B is updated)</option>
-          <option value="b_to_a" ${p.direction==='b_to_a'?'selected':''}>B → A (B is source, A is updated)</option></select></label>
-        <label>Conflict resolution<select data-p="conflict_resolution">
-          <option value="a wins" ${p.conflict_resolution==='a wins'?'selected':''}>A wins</option>
-          <option value="b wins" ${p.conflict_resolution==='b wins'?'selected':''}>B wins</option></select></label>
       </div>
-      <p class="hint">One-way means the source side is treated read-only — it's never
-      modified, only the other side is updated to match. Conflict resolution only
-      applies to bidirectional pairs.</p>
+      <p class="hint">Direction is set <b>per mapping</b> below. One-way means the
+      source side is treated read-only — it's never modified, only the other side
+      is updated to match. Conflict resolution (A/B wins) only applies to
+      bidirectional mappings.</p>
       <h3>Mappings</h3>
-      <table class="tbl"><thead><tr><th>Short name</th><th>A</th><th>B</th><th></th></tr></thead>
+      <table class="tbl"><thead><tr><th>Short name</th><th>A</th><th>B</th><th>Direction</th><th></th></tr></thead>
         <tbody id="map-${pid}"></tbody></table>
       <div class="row gap wrap">
         <button class="btn" id="save-${pid}" onclick="savePair('${pid}')">Save pair</button>
@@ -289,16 +283,32 @@ function markDirty(pid){
 }
 
 function renderMap(pid){
-  const tb=$('map-'+pid); tb.innerHTML=''; const colls=CFG.pairs[pid].collections||[];
-  const labels=CFG.pairs[pid].labels||{};
+  const p=CFG.pairs[pid];
+  const tb=$('map-'+pid); tb.innerHTML=''; const colls=p.collections||[];
+  const labels=p.labels||{};
   colls.forEach((c,i)=>{ const tr=document.createElement('tr');
     const lbl=labels[c[0]];
+    const dir=c[3]||p.direction||'both';
+    const conf=c[4]||p.conflict_resolution||'a wins';
+    const dirSel=`<select onchange="setMapDir('${pid}',${i},this.value)">`+
+      `<option value="both" ${dir==='both'?'selected':''}>Bidirectional</option>`+
+      `<option value="a_to_b" ${dir==='a_to_b'?'selected':''}>A → B</option>`+
+      `<option value="b_to_a" ${dir==='b_to_a'?'selected':''}>B → A</option></select>`;
+    const confSel=dir==='both'
+      ? `<select onchange="setMapConf('${pid}',${i},this.value)" title="Conflict resolution">`+
+        `<option value="a wins" ${conf==='a wins'?'selected':''}>A wins</option>`+
+        `<option value="b wins" ${conf==='b wins'?'selected':''}>B wins</option></select>` : '';
     tr.innerHTML=`<td data-label="Short name">${esc(c[0])}${lbl?' <span class="muted">('+esc(lbl)+')</span>':''}</td>`+
       `<td class="uid" data-label="A">${esc(c[1])}</td><td class="uid" data-label="B">${esc(c[2])}</td>`+
+      `<td data-label="Direction"><div class="row gap wrap">${dirSel}${confSel}</div></td>`+
       `<td class="row gap" data-label=""><button class="btn small" onclick="syncMapping('${pid}',${i})">Sync</button>`+
       `<button class="btn small danger" onclick="delMap('${pid}',${i})">×</button></td>`; tb.appendChild(tr); });
-  if(!colls.length) tb.innerHTML='<tr><td colspan="4" class="muted">No mappings yet.</td></tr>';
+  if(!colls.length) tb.innerHTML='<tr><td colspan="5" class="muted">No mappings yet.</td></tr>';
 }
+function setMapDir(pid,i,v){ const c=CFG.pairs[pid].collections[i];
+  while(c.length<5) c.push(c.length===3?'both':'a wins'); c[3]=v; renderMap(pid); markDirty(pid); }
+function setMapConf(pid,i,v){ const c=CFG.pairs[pid].collections[i];
+  while(c.length<5) c.push(c.length===3?'both':'a wins'); c[4]=v; markDirty(pid); }
 function delMap(pid,i){ CFG.pairs[pid].collections.splice(i,1); renderMap(pid); markDirty(pid); }
 
 async function syncPair(pid){
@@ -510,7 +520,8 @@ function addMap(pid){
   const aid=$('sa-'+pid).value, bid=$('sb-'+pid).value;
   const sn=($('sn-'+pid).value||'').trim()||('map'+(CFG.pairs[pid].collections.length+1));
   if(!aid||!bid){ toast('Select both sides',true); return; }
-  CFG.pairs[pid].collections.push([sn,aid,bid]);
+  const dd=CFG.pairs[pid].direction||'both', dc=CFG.pairs[pid].conflict_resolution||'a wins';
+  CFG.pairs[pid].collections.push([sn,aid,bid,dd,dc]);
   // remember the real calendar/address-book name for the activity feed
   const d=discovered[pid]||{a:{collections:[]},b:{collections:[]}};
   const an=(d.a.collections.find(x=>x.id===aid)||{}).name;

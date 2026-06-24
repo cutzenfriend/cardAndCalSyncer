@@ -201,7 +201,32 @@ class Runner:
             self.busy_since = time.time()
             self._op_task = asyncio.current_task()
             try:
-                return await self._run_sync_inner(pair, collection, trigger)
+                if collection is not None:
+                    return await self._run_sync_inner(pair, collection, trigger)
+                # whole pair: sync each mapping as its own run, because direction
+                # is per-mapping now and a vdirsyncer pair can't mix directions.
+                shorts = [c[0] for c in self.store.get()["pairs"].get(pair, {})
+                          .get("collections", []) if c]
+                if not shorts:
+                    return {"run_id": None, "status": "success", "rc": 0,
+                            "counts": {"create": 0, "update": 0, "delete": 0},
+                            "errors": [], "warnings": []}
+                agg = {"create": 0, "update": 0, "delete": 0}
+                errors: list[str] = []
+                warnings: list[str] = []
+                failed = False
+                last_id = None
+                for short in shorts:
+                    r = await self._run_sync_inner(pair, short, trigger)
+                    last_id = r.get("run_id")
+                    for k in agg:
+                        agg[k] += r.get("counts", {}).get(k, 0)
+                    errors += r.get("errors", [])
+                    warnings += r.get("warnings", [])
+                    failed = failed or r.get("status") == "failed"
+                return {"run_id": last_id, "status": "failed" if failed else "success",
+                        "rc": -1 if failed else 0, "counts": agg,
+                        "errors": errors, "warnings": warnings}
             finally:
                 self.busy = False
                 self.busy_since = None
@@ -232,14 +257,12 @@ class Runner:
 
     async def _do_sync(self, run_id: int, cfg: dict[str, Any], prev_status: str | None,
                        pair: str | None, collection: str | None = None) -> dict[str, Any]:
-        conf, secret_env = confgen.generate(cfg, only_pair=pair)
+        # Always scope to a single mapping so read_only matches this mapping's
+        # direction (per-mapping bisync/one-way).
+        conf, secret_env = confgen.generate(cfg, only_pair=pair, only_collection=collection)
         self._write_conf(CONFIG_FILE, conf)
 
-        cmd = ["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE, "sync"]
-        if pair and collection:
-            cmd.append(f"{pair}/{collection}")   # single mapping
-        elif pair:
-            cmd.append(pair)                      # whole pair
+        cmd = ["vdirsyncer", "-v", "INFO", "-c", CONFIG_FILE, "sync", f"{pair}/{collection}"]
 
         rc, lines = await self._exec(cmd, secret_env, run_id)
         parsed = parser.parse_sync_output(lines)
