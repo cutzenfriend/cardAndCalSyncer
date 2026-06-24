@@ -263,7 +263,7 @@ function renderPairs(){
         <tbody id="map-${pid}"></tbody></table>
       <div class="row gap wrap">
         <button class="btn" id="save-${pid}" onclick="savePair('${pid}')">Save pair</button>
-        <button class="btn" onclick="doDiscover('${pid}')">Load collections</button>
+        <button class="btn" id="discbtn-${pid}" onclick="doDiscover('${pid}')">Load collections</button>
         <button class="btn primary" onclick="syncPair('${pid}')">Sync pair</button>
         <button class="btn small" onclick="clearDialog('${pid}','a')">Clear A…</button>
         <button class="btn small" onclick="clearDialog('${pid}','b')">Clear B…</button>
@@ -440,14 +440,20 @@ async function delPair(pid){
   catch(e){ toast(e.message,true); }
 }
 
+const _discovering=new Set();
 async function doDiscover(pid){
   if(CFG.pairs[pid]._new){ toast('Please "Save pair" first',true); return; }
+  if(_discovering.has(pid)) return;            // ignore double-clicks
+  _discovering.add(pid);
+  const btn=$('discbtn-'+pid); if(btn) btn.disabled=true;
   const note=$('disc-'+pid); note.textContent='saving & loading… (10–30s)';
   try{
-    // persist the current A/B/type first so discovery matches what's shown
+    // persist the current A/B/type first so discovery matches what's shown.
+    // register:false → don't let the save spawn its own background discover,
+    // which would hold the lock and make the discover below fail with 409.
     const p=CFG.pairs[pid];
     await api('/api/pairs',{method:'POST',body:JSON.stringify({id:pid,name:p.name,service:p.service,
-      a:p.a,b:p.b,direction:p.direction||'both',conflict_resolution:p.conflict_resolution,collections:p.collections,labels:p.labels||{}})});
+      a:p.a,b:p.b,direction:p.direction||'both',conflict_resolution:p.conflict_resolution,collections:p.collections,labels:p.labels||{},register:false})});
     const res=await api('/api/discover',{method:'POST',body:JSON.stringify({pair:pid})});
     discovered[pid]=res;
     note.textContent='';
@@ -484,6 +490,7 @@ async function doDiscover(pid){
     if((CFG.pairs[pid].collections||[]).length) markDirty(pid);
     renderBuilder(pid,res);
   }catch(e){ note.textContent='Error: '+e.message; }
+  finally{ _discovering.delete(pid); if(btn) btn.disabled=false; }
 }
 
 function opt(list){ return list.map(c=>`<option value="${esc(c.id)}">${esc(c.name||c.id)}</option>`).join(''); }

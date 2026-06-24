@@ -484,7 +484,12 @@ async def api_save_pair(request: Request, _: str = Depends(require_api)):
         "labels": body.get("labels", pairs.get(pid, {}).get("labels", {})),
     }
     store.replace("pairs", pairs)
-    if pairs[pid]["collections"]:
+    # Pre-register collection mappings so a later sync works without a manual
+    # discover. Skip it when the caller is about to run its own discover
+    # (register=False, e.g. "Load collections") or when another op holds the
+    # lock — otherwise this background discover grabs the lock and the caller's
+    # very next request fails with "Another operation is running (0s)".
+    if pairs[pid]["collections"] and body.get("register", True) and not runner.busy:
         _spawn(runner.discover(pid, list_all=False))  # register mappings
     return {"ok": True, "id": pid, "config": store.public_view()}
 
